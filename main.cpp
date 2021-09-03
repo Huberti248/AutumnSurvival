@@ -59,6 +59,7 @@ using namespace std::chrono_literals;
 //640 x 480 (480i - Smallest PC monitor)
 
 #define LEAF_INIT_SPAWN_DELAY_IN_MS 1000
+#define LEAF_ROT_INIT_DELAY_IN_MS 5000
 
 int windowWidth = 240;
 int windowHeight = 320;
@@ -496,6 +497,7 @@ struct Shop {
     SDL_FRect backArrowR{};
 };
 
+std::string prefPath;
 SDL_Texture* leafT;
 SDL_Texture* treeT;
 SDL_Texture* tree1T;
@@ -518,6 +520,31 @@ Shop shop;
 State state = State::Gameplay;
 int trees = 1;
 int leafSpawnDelayInMs = LEAF_INIT_SPAWN_DELAY_IN_MS;
+Clock leafRotClock;
+int leafRotDelayInMs = LEAF_ROT_INIT_DELAY_IN_MS;
+
+void saveData()
+{
+    pugi::xml_document doc;
+    pugi::xml_node rootNode = doc.append_child("root");
+    pugi::xml_node scoreNode = rootNode.append_child("score");
+    scoreNode.append_child(pugi::node_pcdata).set_value(scoreText.text.c_str());
+    pugi::xml_node treesNode = rootNode.append_child("trees");
+    treesNode.append_child(pugi::node_pcdata).set_value(std::to_string(trees).c_str());
+    pugi::xml_node leafSpawnDelayInMsNode = rootNode.append_child("leafSpawnDelayInMs");
+    leafSpawnDelayInMsNode.append_child(pugi::node_pcdata).set_value(std::to_string(leafSpawnDelayInMs).c_str());
+    doc.save_file((prefPath + "data.xml").c_str());
+}
+
+void readData()
+{
+    pugi::xml_document doc;
+    doc.load_file((prefPath + "data.xml").c_str());
+    pugi::xml_node rootNode = doc.child("root");
+    scoreText.setText(renderer, robotoF, rootNode.child("score").text().as_int());
+    trees = rootNode.child("trees").text().as_int(1);
+    leafSpawnDelayInMs = rootNode.child("leafSpawnDelayInMs").text().as_int(LEAF_INIT_SPAWN_DELAY_IN_MS);
+}
 
 void mainLoop()
 {
@@ -612,6 +639,12 @@ void mainLoop()
                 leafs[i].r.x += -0.01 * deltaTime;
             }
             leafs[i].r.y = std::pow(leafs[i].r.x, 2) / 28;
+        }
+        if (leafRotClock.getElapsedTime() > leafRotDelayInMs) {
+            if (std::stoi(scoreText.text) > 0) {
+                scoreText.setText(renderer, robotoF, std::stoi(scoreText.text) - 1);
+            }
+            leafRotClock.restart();
         }
         SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
         SDL_RenderClear(renderer);
@@ -732,14 +765,15 @@ void mainLoop()
             SDL_RenderCopyF(renderer, buyT, 0, &shop.moreTreesBuyR);
         }
         if (leafSpawnDelayInMs > 100) {
-        SDL_RenderCopyF(renderer, leafT, 0, &shop.leafR);
-        shop.moreLeafsText.draw(renderer);
-        shop.moreLeafsPriceText.draw(renderer);
-        SDL_RenderCopyF(renderer, buyT, 0, &shop.moreLeafsBuyR);
+            SDL_RenderCopyF(renderer, leafT, 0, &shop.leafR);
+            shop.moreLeafsText.draw(renderer);
+            shop.moreLeafsPriceText.draw(renderer);
+            SDL_RenderCopyF(renderer, buyT, 0, &shop.moreLeafsBuyR);
         }
         SDL_RenderCopyF(renderer, backArrowT, 0, &shop.backArrowR);
         SDL_RenderPresent(renderer);
     }
+    saveData();
 }
 
 int main(int argc, char* argv[])
@@ -757,6 +791,7 @@ int main(int argc, char* argv[])
     SDL_GetWindowSize(window, &w, &h);
     SDL_RenderSetScale(renderer, w / (float)windowWidth, h / (float)windowHeight);
     SDL_AddEventWatch(eventWatch, 0);
+    prefPath = SDL_GetPrefPath("NextCodeApps", "AutumnLeafCollector");
     leafT = IMG_LoadTexture(renderer, "res/leaves.png");
     treeT = IMG_LoadTexture(renderer, "res/tree.png");
     tree1T = IMG_LoadTexture(renderer, "res/tree1.png");
@@ -777,7 +812,7 @@ int main(int argc, char* argv[])
     tree3R.h = 32;
     tree3R.x = treeR.x + treeR.w + 20;
     tree3R.y = windowHeight - treeR.h - 50;
-    scoreText.setText(renderer, robotoF, 2000); // TODO: Set it to 0
+    scoreText.setText(renderer, robotoF, 0);
     scoreText.dstR.w = 50;
     scoreText.dstR.h = 30;
     scoreText.dstR.x = windowWidth / 2 - scoreText.dstR.w / 2;
@@ -826,9 +861,11 @@ int main(int argc, char* argv[])
     shop.moreLeafsBuyR.h = 32;
     shop.moreLeafsBuyR.x = shop.moreLeafsPriceText.dstR.x;
     shop.moreLeafsBuyR.y = shop.moreLeafsPriceText.dstR.y + shop.moreLeafsPriceText.dstR.h;
+    readData();
     leafClock.restart();
     globalClock.restart();
     treeAnimationClock.restart();
+    leafRotClock.restart();
 #ifdef __EMSCRIPTEN__
     emscripten_set_main_loop(mainLoop, 0, 1);
 #else

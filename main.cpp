@@ -489,12 +489,24 @@ struct Shop {
     SDL_FRect treeR{};
     Text moreTreesText;
     Text moreTreesPriceText;
-    SDL_FRect moreTreesBuyR;
+    SDL_FRect moreTreesBuyR{};
+
     SDL_FRect leafR{};
     Text moreLeafsText;
     Text moreLeafsPriceText;
-    SDL_FRect moreLeafsBuyR;
+    SDL_FRect moreLeafsBuyR{};
+
+    SDL_FRect lessLeafRotR{};
+    Text lessLeafRotText;
+    Text lessLeafRotPriceText;
+    SDL_FRect lessLeafRotBuyR{};
+
     SDL_FRect backArrowR{};
+};
+
+enum class Music {
+    JosephKosma,
+    AntonioVivaldi,
 };
 
 std::string prefPath;
@@ -506,6 +518,9 @@ SDL_Texture* tree3T;
 SDL_Texture* shopT;
 SDL_Texture* backArrowT;
 SDL_Texture* buyT;
+SDL_Texture* leafWithSprayerT;
+Mix_Music* josephKosmaM;
+Mix_Music* antonioVivaldiM;
 int currentTreeIndex = 0;
 SDL_FRect treeR;
 SDL_FRect tree2R;
@@ -522,6 +537,7 @@ int trees = 1;
 int leafSpawnDelayInMs = LEAF_INIT_SPAWN_DELAY_IN_MS;
 Clock leafRotClock;
 int leafRotDelayInMs = LEAF_ROT_INIT_DELAY_IN_MS;
+Music currentMusic = Music::JosephKosma;
 
 void saveData()
 {
@@ -533,6 +549,8 @@ void saveData()
     treesNode.append_child(pugi::node_pcdata).set_value(std::to_string(trees).c_str());
     pugi::xml_node leafSpawnDelayInMsNode = rootNode.append_child("leafSpawnDelayInMs");
     leafSpawnDelayInMsNode.append_child(pugi::node_pcdata).set_value(std::to_string(leafSpawnDelayInMs).c_str());
+    pugi::xml_node leafRotDelayInMsNode = rootNode.append_child("leafRotDelayInMs");
+    leafRotDelayInMsNode.append_child(pugi::node_pcdata).set_value(std::to_string(leafRotDelayInMs).c_str());
     doc.save_file((prefPath + "data.xml").c_str());
 }
 
@@ -544,6 +562,7 @@ void readData()
     scoreText.setText(renderer, robotoF, rootNode.child("score").text().as_int());
     trees = rootNode.child("trees").text().as_int(1);
     leafSpawnDelayInMs = rootNode.child("leafSpawnDelayInMs").text().as_int(LEAF_INIT_SPAWN_DELAY_IN_MS);
+    leafRotDelayInMs = rootNode.child("leafRotDelayInMs").text().as_int(LEAF_ROT_INIT_DELAY_IN_MS);
 }
 
 void mainLoop()
@@ -554,6 +573,16 @@ void mainLoop()
     windowR.h = windowHeight;
     windowR.x = 0;
     windowR.y = 0;
+    if (!Mix_PlayingMusic()) {
+        if (currentMusic == Music::JosephKosma) {
+            currentMusic = Music::AntonioVivaldi;
+            Mix_PlayMusic(antonioVivaldiM, 1);
+        }
+        else if (currentMusic == Music::AntonioVivaldi) {
+            currentMusic = Music::JosephKosma;
+            Mix_PlayMusic(josephKosmaM, 1);
+        }
+    }
     if (state == State::Gameplay) {
         SDL_Event event;
         while (SDL_PollEvent(&event)) {
@@ -743,6 +772,12 @@ void mainLoop()
                         }
                     }
                 }
+                if (SDL_PointInFRect(&mousePos, &shop.lessLeafRotBuyR)) {
+                    if (std::stoi(scoreText.text) >= std::stoi(shop.lessLeafRotPriceText.text)) {
+                        scoreText.setText(renderer, robotoF, std::stoi(scoreText.text) - std::stoi(shop.lessLeafRotPriceText.text));
+                        leafRotDelayInMs += 1000;
+                    }
+                }
             }
             if (event.type == SDL_MOUSEBUTTONUP) {
                 buttons[event.button.button] = false;
@@ -770,6 +805,10 @@ void mainLoop()
             shop.moreLeafsPriceText.draw(renderer);
             SDL_RenderCopyF(renderer, buyT, 0, &shop.moreLeafsBuyR);
         }
+        SDL_RenderCopyF(renderer, leafWithSprayerT, 0, &shop.lessLeafRotR);
+        shop.lessLeafRotText.draw(renderer);
+        shop.lessLeafRotPriceText.draw(renderer);
+        SDL_RenderCopyF(renderer, buyT, 0, &shop.lessLeafRotBuyR);
         SDL_RenderCopyF(renderer, backArrowT, 0, &shop.backArrowR);
         SDL_RenderPresent(renderer);
     }
@@ -783,6 +822,7 @@ int main(int argc, char* argv[])
     SDL_LogSetOutputFunction(logOutputCallback, 0);
     SDL_Init(SDL_INIT_EVERYTHING);
     TTF_Init();
+    Mix_OpenAudio(44100, MIX_DEFAULT_FORMAT, 2, 2048);
     SDL_GetMouseState(&mousePos.x, &mousePos.y);
     window = SDL_CreateWindow("AutumnLeafCollector", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, windowWidth, windowHeight, SDL_WINDOW_RESIZABLE);
     renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
@@ -800,6 +840,10 @@ int main(int argc, char* argv[])
     shopT = IMG_LoadTexture(renderer, "res/shop.png");
     backArrowT = IMG_LoadTexture(renderer, "res/backArrow.png");
     buyT = IMG_LoadTexture(renderer, "res/buy.png");
+    leafWithSprayerT = IMG_LoadTexture(renderer, "res/leafWithSprayer.png");
+    josephKosmaM = Mix_LoadMUS("res/autumnLeavesJosephKosma.mp3");
+    antonioVivaldiM = Mix_LoadMUS("res/jesienAntonioVivaldi.mp3");
+    Mix_PlayMusic(josephKosmaM, 1);
     treeR.w = 32;
     treeR.h = 32;
     treeR.x = windowWidth / 2 - treeR.w / 2;
@@ -861,6 +905,24 @@ int main(int argc, char* argv[])
     shop.moreLeafsBuyR.h = 32;
     shop.moreLeafsBuyR.x = shop.moreLeafsPriceText.dstR.x;
     shop.moreLeafsBuyR.y = shop.moreLeafsPriceText.dstR.y + shop.moreLeafsPriceText.dstR.h;
+    shop.lessLeafRotR.w = 32;
+    shop.lessLeafRotR.h = 32;
+    shop.lessLeafRotR.x = shop.treeR.x;
+    shop.lessLeafRotR.y = shop.moreTreesBuyR.y + shop.moreTreesBuyR.h + 5;
+    shop.lessLeafRotText.setText(renderer, robotoF, "Less leaf rot");
+    shop.lessLeafRotText.dstR.w = 85;
+    shop.lessLeafRotText.dstR.h = 35;
+    shop.lessLeafRotText.dstR.x = shop.lessLeafRotR.x;
+    shop.lessLeafRotText.dstR.y = shop.lessLeafRotR.y + shop.lessLeafRotR.h;
+    shop.lessLeafRotPriceText.setText(renderer, robotoF, 100);
+    shop.lessLeafRotPriceText.dstR.w = 70;
+    shop.lessLeafRotPriceText.dstR.h = 35;
+    shop.lessLeafRotPriceText.dstR.x = shop.lessLeafRotText.dstR.x;
+    shop.lessLeafRotPriceText.dstR.y = shop.lessLeafRotText.dstR.y + shop.lessLeafRotText.dstR.h;
+    shop.lessLeafRotBuyR.w = 45;
+    shop.lessLeafRotBuyR.h = 32;
+    shop.lessLeafRotBuyR.x = shop.lessLeafRotPriceText.dstR.x;
+    shop.lessLeafRotBuyR.y = shop.lessLeafRotPriceText.dstR.y + shop.lessLeafRotPriceText.dstR.h;
     readData();
     leafClock.restart();
     globalClock.restart();

@@ -61,6 +61,9 @@ using namespace std::chrono_literals;
 #define LEAF_INIT_SPAWN_DELAY_IN_MS 1000
 #define LEAF_ROT_INIT_DELAY_IN_MS 5000
 #define GRAPE_INIT_SPAWN_DELAY_IN_MS 10000
+#define APPLE_INIT_SPAWN_DELAY_IN_MS 5000
+#define BANANA_INIT_SPAWN_DELAY_IN_MS 3000
+#define CARROT_INIT_SPAWN_DELAY_IN_MS 5000
 
 int windowWidth = 240;
 int windowHeight = 320;
@@ -478,6 +481,9 @@ enum class Direction {
 enum class EntityType {
     Leaf,
     Grape,
+    Apple,
+    Banana,
+    Carrot,
 };
 
 struct Entity {
@@ -528,6 +534,12 @@ SDL_Texture* buyT;
 SDL_Texture* leafWithSprayerT;
 SDL_Texture* vineT;
 SDL_Texture* grapeT;
+SDL_Texture* appleT;
+SDL_Texture* appleTreeT;
+SDL_Texture* bananaT;
+SDL_Texture* bananaTreeT;
+SDL_Texture* carrotT;
+SDL_Texture* soilT;
 Mix_Music* josephKosmaM;
 Mix_Music* antonioVivaldiM;
 int currentTreeIndex = 0;
@@ -535,11 +547,17 @@ SDL_FRect treeR;
 SDL_FRect tree2R;
 SDL_FRect tree3R;
 SDL_FRect grapeTreeR;
+SDL_FRect appleTreeR;
+SDL_FRect bananaTreeR;
+SDL_FRect carrotTreeR;
 std::vector<Entity> entities;
 Clock leafClock;
 Clock globalClock;
 Clock treeAnimationClock;
 Clock grapeClock;
+Clock appleClock;
+Clock bananaClock;
+Clock carrotClock;
 Text scoreText;
 SDL_FRect shopR;
 Shop shop;
@@ -551,6 +569,9 @@ int leafRotDelayInMs = LEAF_ROT_INIT_DELAY_IN_MS;
 Music currentMusic = Music::JosephKosma;
 int mouseOffsetX = 0;
 int grapeSpawnDelayInMs = GRAPE_INIT_SPAWN_DELAY_IN_MS;
+int appleSpawnDelayInMs = APPLE_INIT_SPAWN_DELAY_IN_MS;
+int bananaSpawnDelayInMs = BANANA_INIT_SPAWN_DELAY_IN_MS;
+int carrotSpawnDelayInMs = CARROT_INIT_SPAWN_DELAY_IN_MS;
 
 void saveData()
 {
@@ -624,6 +645,15 @@ void mainLoop()
                         else if (entities[i].entityType == EntityType::Grape) {
                             scoreText.setText(renderer, robotoF, std::stoi(scoreText.text) + 10);
                         }
+                        else if (entities[i].entityType == EntityType::Apple) {
+                            scoreText.setText(renderer, robotoF, std::stoi(scoreText.text) + 5);
+                        }
+                        else if (entities[i].entityType == EntityType::Banana) {
+                            scoreText.setText(renderer, robotoF, std::stoi(scoreText.text) + 3);
+                        }
+                        else if (entities[i].entityType == EntityType::Carrot) {
+                            scoreText.setText(renderer, robotoF, std::stoi(scoreText.text) + 5);
+                        }
                         entities.erase(entities.begin() + i--);
                     }
                     else {
@@ -693,6 +723,42 @@ void mainLoop()
             entities.back().entityType = EntityType::Grape;
             grapeClock.restart();
         }
+        if (appleClock.getElapsedTime() > appleSpawnDelayInMs) {
+            entities.push_back(Entity());
+            entities.back().r.w = 32;
+            entities.back().r.h = 32;
+            entities.back().r.x = 0;
+            entities.back().r.y = 0;
+            entities.back().direction = (Direction)random(0, 1);
+            entities.back().offsetP.x = 250;
+            entities.back().offsetP.y = 230;
+            entities.back().entityType = EntityType::Apple;
+            appleClock.restart();
+        }
+        if (bananaClock.getElapsedTime() > bananaSpawnDelayInMs) {
+            entities.push_back(Entity());
+            entities.back().r.w = 32;
+            entities.back().r.h = 32;
+            entities.back().r.x = 0;
+            entities.back().r.y = 0;
+            entities.back().direction = (Direction)random(0, 1);
+            entities.back().offsetP.x = 0;
+            entities.back().offsetP.y = 230;
+            entities.back().entityType = EntityType::Banana;
+            bananaClock.restart();
+        }
+        if (carrotClock.getElapsedTime() > carrotSpawnDelayInMs) {
+            entities.push_back(Entity());
+            entities.back().r.w = 32;
+            entities.back().r.h = 32;
+            entities.back().r.x = 0;
+            entities.back().r.y = 0;
+            entities.back().direction = (Direction)random(0, 1);
+            entities.back().offsetP.x = -50;
+            entities.back().offsetP.y = 230;
+            entities.back().entityType = EntityType::Carrot;
+            carrotClock.restart();
+        }
         for (int i = 0; i < entities.size(); ++i) {
             if (entities[i].direction == Direction::Right) {
                 entities[i].r.x += 0.01 * deltaTime;
@@ -714,6 +780,9 @@ void mainLoop()
         tree2R.x += mouseOffsetX;
         tree3R.x += mouseOffsetX;
         grapeTreeR.x += mouseOffsetX;
+        appleTreeR.x += mouseOffsetX;
+        bananaTreeR.x += mouseOffsetX;
+        carrotTreeR.x += mouseOffsetX;
         if (currentTreeIndex == 0) {
             SDL_RenderCopyF(renderer, treeT, 0, &treeR);
         }
@@ -755,10 +824,16 @@ void mainLoop()
             }
         }
         SDL_RenderCopyF(renderer, vineT, 0, &grapeTreeR);
+        SDL_RenderCopyF(renderer, appleTreeT, 0, &appleTreeR);
+        SDL_RenderCopyF(renderer, bananaTreeT, 0, &bananaTreeR);
+        SDL_RenderCopyF(renderer, carrotT, 0, &carrotTreeR);
         treeR.x -= mouseOffsetX;
         tree2R.x -= mouseOffsetX;
         tree3R.x -= mouseOffsetX;
         grapeTreeR.x -= mouseOffsetX;
+        appleTreeR.x -= mouseOffsetX;
+        bananaTreeR.x -= mouseOffsetX;
+        carrotTreeR.x -= mouseOffsetX;
         if (treeAnimationClock.getElapsedTime() > 1000) {
             if (++currentTreeIndex >= 4) {
                 currentTreeIndex = 0;
@@ -773,6 +848,15 @@ void mainLoop()
             }
             else if (entities[i].entityType == EntityType::Grape) {
                 SDL_RenderCopyF(renderer, grapeT, 0, &entities[i].r);
+            }
+            else if (entities[i].entityType == EntityType::Apple) {
+                SDL_RenderCopyF(renderer, appleT, 0, &entities[i].r);
+            }
+            else if (entities[i].entityType == EntityType::Banana) {
+                SDL_RenderCopyF(renderer, bananaT, 0, &entities[i].r);
+            }
+            else if (entities[i].entityType == EntityType::Carrot) {
+                SDL_RenderCopyF(renderer, carrotT, 0, &entities[i].r);
             }
             entities[i].r.x -= entities[i].offsetP.x + mouseOffsetX;
             entities[i].r.y -= entities[i].offsetP.y;
@@ -890,6 +974,12 @@ int main(int argc, char* argv[])
     leafWithSprayerT = IMG_LoadTexture(renderer, "res/leafWithSprayer.png");
     vineT = IMG_LoadTexture(renderer, "res/vine.png");
     grapeT = IMG_LoadTexture(renderer, "res/grape.png");
+    appleT = IMG_LoadTexture(renderer, "res/apple.png");
+    appleTreeT = IMG_LoadTexture(renderer, "res/appleTree.png");
+    bananaT = IMG_LoadTexture(renderer, "res/banana.png");
+    carrotT = IMG_LoadTexture(renderer, "res/carrot.png");
+    soilT = IMG_LoadTexture(renderer, "res/soil.png");
+    bananaTreeT = IMG_LoadTexture(renderer, "res/bananaTree.png");
     josephKosmaM = Mix_LoadMUS("res/autumnLeavesJosephKosma.mp3");
     antonioVivaldiM = Mix_LoadMUS("res/jesienAntonioVivaldi.mp3");
     Mix_PlayMusic(josephKosmaM, 1);
@@ -909,6 +999,18 @@ int main(int argc, char* argv[])
     grapeTreeR.h = 32;
     grapeTreeR.x = tree3R.x + tree3R.w + 20;
     grapeTreeR.y = tree3R.y;
+    appleTreeR.w = 32;
+    appleTreeR.h = 32;
+    appleTreeR.x = grapeTreeR.x + grapeTreeR.w + 20;
+    appleTreeR.y = grapeTreeR.y;
+    bananaTreeR.w = 32;
+    bananaTreeR.h = 32;
+    bananaTreeR.x = tree2R.x - bananaTreeR.w - 20;
+    bananaTreeR.y = tree2R.y;
+    carrotTreeR.w = 32;
+    carrotTreeR.h = 32;
+    carrotTreeR.x = bananaTreeR.x - carrotTreeR.w - 20;
+    carrotTreeR.y = bananaTreeR.y;
     scoreText.setText(renderer, robotoF, 0);
     scoreText.dstR.w = 50;
     scoreText.dstR.h = 30;
@@ -981,6 +1083,9 @@ int main(int argc, char* argv[])
     globalClock.restart();
     treeAnimationClock.restart();
     leafRotClock.restart();
+    grapeClock.restart();
+    appleClock.restart();
+    bananaClock.restart();
 #ifdef __EMSCRIPTEN__
     emscripten_set_main_loop(mainLoop, 0, 1);
 #else

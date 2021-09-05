@@ -540,6 +540,8 @@ SDL_Texture* bananaT;
 SDL_Texture* bananaTreeT;
 SDL_Texture* carrotT;
 SDL_Texture* soilT;
+SDL_Texture* mutedT;
+SDL_Texture* soundT;
 Mix_Music* josephKosmaM;
 Mix_Music* antonioVivaldiM;
 int currentTreeIndex = 0;
@@ -550,6 +552,7 @@ SDL_FRect grapeTreeR;
 SDL_FRect appleTreeR;
 SDL_FRect bananaTreeR;
 SDL_FRect carrotTreeR;
+SDL_FRect soundBtnR;
 std::vector<Entity> entities;
 Clock leafClock;
 Clock globalClock;
@@ -572,6 +575,7 @@ int grapeSpawnDelayInMs = GRAPE_INIT_SPAWN_DELAY_IN_MS;
 int appleSpawnDelayInMs = APPLE_INIT_SPAWN_DELAY_IN_MS;
 int bananaSpawnDelayInMs = BANANA_INIT_SPAWN_DELAY_IN_MS;
 int carrotSpawnDelayInMs = CARROT_INIT_SPAWN_DELAY_IN_MS;
+bool isMuted = false;
 
 void saveData()
 {
@@ -586,6 +590,7 @@ void saveData()
     pugi::xml_node leafRotDelayInMsNode = rootNode.append_child("leafRotDelayInMs");
     leafRotDelayInMsNode.append_child(pugi::node_pcdata).set_value(std::to_string(leafRotDelayInMs).c_str());
     doc.save_file((prefPath + "data.xml").c_str());
+    // TODO: Save isMuted
 }
 
 void readData()
@@ -597,6 +602,18 @@ void readData()
     trees = rootNode.child("trees").text().as_int(1);
     leafSpawnDelayInMs = rootNode.child("leafSpawnDelayInMs").text().as_int(LEAF_INIT_SPAWN_DELAY_IN_MS);
     leafRotDelayInMs = rootNode.child("leafRotDelayInMs").text().as_int(LEAF_ROT_INIT_DELAY_IN_MS);
+}
+
+void muteMusicAndSounds()
+{
+    Mix_VolumeMusic(0);
+    Mix_Volume(-1, 0);
+}
+
+void unmuteMusicAndSounds()
+{
+    Mix_VolumeMusic(128);
+    Mix_Volume(-1, 128);
 }
 
 void mainLoop()
@@ -663,6 +680,15 @@ void mainLoop()
                 }
                 if (SDL_PointInFRect(&mousePos, &shopR)) {
                     state = State::Shop;
+                }
+                if (SDL_PointInFRect(&mousePos, &soundBtnR)) {
+                    isMuted = !isMuted;
+                    if (isMuted) {
+                        muteMusicAndSounds();
+                    }
+                    else {
+                        unmuteMusicAndSounds();
+                    }
                 }
             }
             if (event.type == SDL_MOUSEBUTTONUP) {
@@ -863,6 +889,12 @@ void mainLoop()
         }
         scoreText.draw(renderer);
         SDL_RenderCopyF(renderer, shopT, 0, &shopR);
+        if (isMuted) {
+            SDL_RenderCopyF(renderer, mutedT, 0, &soundBtnR);
+        }
+        else {
+            SDL_RenderCopyF(renderer, soundT, 0, &soundBtnR);
+        }
         SDL_RenderPresent(renderer);
     }
     else if (state == State::Shop) {
@@ -980,6 +1012,8 @@ int main(int argc, char* argv[])
     carrotT = IMG_LoadTexture(renderer, "res/carrot.png");
     soilT = IMG_LoadTexture(renderer, "res/soil.png");
     bananaTreeT = IMG_LoadTexture(renderer, "res/bananaTree.png");
+    mutedT = IMG_LoadTexture(renderer, "res/muted.png");
+    soundT = IMG_LoadTexture(renderer, "res/sound.png");
     josephKosmaM = Mix_LoadMUS("res/autumnLeavesJosephKosma.mp3");
     antonioVivaldiM = Mix_LoadMUS("res/jesienAntonioVivaldi.mp3");
     Mix_PlayMusic(josephKosmaM, 1);
@@ -1020,6 +1054,8 @@ int main(int argc, char* argv[])
     shopR.h = 64;
     shopR.x = windowWidth - shopR.w;
     shopR.y = 5;
+    soundBtnR = shopR;
+    soundBtnR.y = shopR.y + shopR.h + 5;
     shop.backArrowR.w = 32;
     shop.backArrowR.h = 32;
     shop.backArrowR.x = 5;

@@ -60,6 +60,7 @@ using namespace std::chrono_literals;
 
 #define LEAF_INIT_SPAWN_DELAY_IN_MS 1000
 #define LEAF_ROT_INIT_DELAY_IN_MS 5000
+#define GRAPE_INIT_SPAWN_DELAY_IN_MS 10000
 
 int windowWidth = 240;
 int windowHeight = 320;
@@ -474,10 +475,16 @@ enum class Direction {
     Right,
 };
 
-struct Leaf {
+enum class EntityType {
+    Leaf,
+    Grape,
+};
+
+struct Entity {
     SDL_FRect r{};
     Direction direction = Direction::Right;
     SDL_FPoint offsetP{};
+    EntityType entityType = EntityType::Leaf;
 };
 
 enum class State {
@@ -519,16 +526,20 @@ SDL_Texture* shopT;
 SDL_Texture* backArrowT;
 SDL_Texture* buyT;
 SDL_Texture* leafWithSprayerT;
+SDL_Texture* vineT;
+SDL_Texture* grapeT;
 Mix_Music* josephKosmaM;
 Mix_Music* antonioVivaldiM;
 int currentTreeIndex = 0;
 SDL_FRect treeR;
 SDL_FRect tree2R;
 SDL_FRect tree3R;
-std::vector<Leaf> leafs;
+SDL_FRect grapeTreeR;
+std::vector<Entity> entities;
 Clock leafClock;
 Clock globalClock;
 Clock treeAnimationClock;
+Clock grapeClock;
 Text scoreText;
 SDL_FRect shopR;
 Shop shop;
@@ -538,6 +549,8 @@ int leafSpawnDelayInMs = LEAF_INIT_SPAWN_DELAY_IN_MS;
 Clock leafRotClock;
 int leafRotDelayInMs = LEAF_ROT_INIT_DELAY_IN_MS;
 Music currentMusic = Music::JosephKosma;
+int mouseOffsetX = 0;
+int grapeSpawnDelayInMs = GRAPE_INIT_SPAWN_DELAY_IN_MS;
 
 void saveData()
 {
@@ -601,16 +614,21 @@ void mainLoop()
             }
             if (event.type == SDL_MOUSEBUTTONDOWN) {
                 buttons[event.button.button] = true;
-                for (int i = 0; i < leafs.size(); ++i) {
-                    leafs[i].r.x += leafs[i].offsetP.x;
-                    leafs[i].r.y += leafs[i].offsetP.y;
-                    if (SDL_PointInFRect(&mousePos, &leafs[i].r)) {
-                        leafs.erase(leafs.begin() + i--);
-                        scoreText.setText(renderer, robotoF, std::stoi(scoreText.text) + 1);
+                for (int i = 0; i < entities.size(); ++i) {
+                    entities[i].r.x += entities[i].offsetP.x + mouseOffsetX;
+                    entities[i].r.y += entities[i].offsetP.y;
+                    if (SDL_PointInFRect(&mousePos, &entities[i].r)) {
+                        if (entities[i].entityType == EntityType::Leaf) {
+                            scoreText.setText(renderer, robotoF, std::stoi(scoreText.text) + 1);
+                        }
+                        else if (entities[i].entityType == EntityType::Grape) {
+                            scoreText.setText(renderer, robotoF, std::stoi(scoreText.text) + 10);
+                        }
+                        entities.erase(entities.begin() + i--);
                     }
                     else {
-                        leafs[i].r.x -= leafs[i].offsetP.x;
-                        leafs[i].r.y -= leafs[i].offsetP.y;
+                        entities[i].r.x -= entities[i].offsetP.x + mouseOffsetX;
+                        entities[i].r.y -= entities[i].offsetP.y;
                     }
                 }
                 if (SDL_PointInFRect(&mousePos, &shopR)) {
@@ -627,47 +645,62 @@ void mainLoop()
                 mousePos.y = event.motion.y / scaleY;
                 realMousePos.x = event.motion.x;
                 realMousePos.y = event.motion.y;
+                if (buttons[SDL_BUTTON_LEFT]) {
+                    mouseOffsetX = mousePos.x - windowWidth / 2;
+                }
             }
         }
         if (leafClock.getElapsedTime() > leafSpawnDelayInMs) {
-            leafs.push_back(Leaf());
-            leafs.back().r.w = 32;
-            leafs.back().r.h = 32;
-            leafs.back().r.x = 0;
-            leafs.back().r.y = 0;
-            leafs.back().direction = (Direction)random(0, 1);
-            leafs.back().offsetP.x = 100;
-            leafs.back().offsetP.y = 230;
+            entities.push_back(Entity());
+            entities.back().r.w = 32;
+            entities.back().r.h = 32;
+            entities.back().r.x = 0;
+            entities.back().r.y = 0;
+            entities.back().direction = (Direction)random(0, 1);
+            entities.back().offsetP.x = 100;
+            entities.back().offsetP.y = 230;
             if (trees > 1) {
-                leafs.push_back(Leaf());
-                leafs.back().r.w = 32;
-                leafs.back().r.h = 32;
-                leafs.back().r.x = 0;
-                leafs.back().r.y = 0;
-                leafs.back().direction = (Direction)random(0, 1);
-                leafs.back().offsetP.x = 50;
-                leafs.back().offsetP.y = 230;
+                entities.push_back(Entity());
+                entities.back().r.w = 32;
+                entities.back().r.h = 32;
+                entities.back().r.x = 0;
+                entities.back().r.y = 0;
+                entities.back().direction = (Direction)random(0, 1);
+                entities.back().offsetP.x = 50;
+                entities.back().offsetP.y = 230;
             }
             if (trees > 2) {
-                leafs.push_back(Leaf());
-                leafs.back().r.w = 32;
-                leafs.back().r.h = 32;
-                leafs.back().r.x = 0;
-                leafs.back().r.y = 0;
-                leafs.back().direction = (Direction)random(0, 1);
-                leafs.back().offsetP.x = 150;
-                leafs.back().offsetP.y = 230;
+                entities.push_back(Entity());
+                entities.back().r.w = 32;
+                entities.back().r.h = 32;
+                entities.back().r.x = 0;
+                entities.back().r.y = 0;
+                entities.back().direction = (Direction)random(0, 1);
+                entities.back().offsetP.x = 150;
+                entities.back().offsetP.y = 230;
             }
             leafClock.restart();
         }
-        for (int i = 0; i < leafs.size(); ++i) {
-            if (leafs[i].direction == Direction::Right) {
-                leafs[i].r.x += 0.01 * deltaTime;
+        if (grapeClock.getElapsedTime() > grapeSpawnDelayInMs) {
+            entities.push_back(Entity());
+            entities.back().r.w = 32;
+            entities.back().r.h = 32;
+            entities.back().r.x = 0;
+            entities.back().r.y = 0;
+            entities.back().direction = (Direction)random(0, 1);
+            entities.back().offsetP.x = 210;
+            entities.back().offsetP.y = 230;
+            entities.back().entityType = EntityType::Grape;
+            grapeClock.restart();
+        }
+        for (int i = 0; i < entities.size(); ++i) {
+            if (entities[i].direction == Direction::Right) {
+                entities[i].r.x += 0.01 * deltaTime;
             }
-            else if (leafs[i].direction == Direction::Left) {
-                leafs[i].r.x += -0.01 * deltaTime;
+            else if (entities[i].direction == Direction::Left) {
+                entities[i].r.x += -0.01 * deltaTime;
             }
-            leafs[i].r.y = std::pow(leafs[i].r.x, 2) / 28;
+            entities[i].r.y = std::pow(entities[i].r.x, 2) / 28;
         }
         if (leafRotClock.getElapsedTime() > leafRotDelayInMs) {
             if (std::stoi(scoreText.text) > 0) {
@@ -677,6 +710,10 @@ void mainLoop()
         }
         SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
         SDL_RenderClear(renderer);
+        treeR.x += mouseOffsetX;
+        tree2R.x += mouseOffsetX;
+        tree3R.x += mouseOffsetX;
+        grapeTreeR.x += mouseOffsetX;
         if (currentTreeIndex == 0) {
             SDL_RenderCopyF(renderer, treeT, 0, &treeR);
         }
@@ -688,12 +725,6 @@ void mainLoop()
         }
         else if (currentTreeIndex == 3) {
             SDL_RenderCopyF(renderer, tree3T, 0, &treeR);
-        }
-        if (treeAnimationClock.getElapsedTime() > 1000) {
-            if (++currentTreeIndex >= 4) {
-                currentTreeIndex = 0;
-            }
-            treeAnimationClock.restart();
         }
         if (trees > 1) {
             if (currentTreeIndex == 0) {
@@ -723,12 +754,28 @@ void mainLoop()
                 SDL_RenderCopyF(renderer, tree3T, 0, &tree3R);
             }
         }
-        for (int i = 0; i < leafs.size(); ++i) {
-            leafs[i].r.x += leafs[i].offsetP.x;
-            leafs[i].r.y += leafs[i].offsetP.y;
-            SDL_RenderCopyF(renderer, leafT, 0, &leafs[i].r);
-            leafs[i].r.x -= leafs[i].offsetP.x;
-            leafs[i].r.y -= leafs[i].offsetP.y;
+        SDL_RenderCopyF(renderer, vineT, 0, &grapeTreeR);
+        treeR.x -= mouseOffsetX;
+        tree2R.x -= mouseOffsetX;
+        tree3R.x -= mouseOffsetX;
+        grapeTreeR.x -= mouseOffsetX;
+        if (treeAnimationClock.getElapsedTime() > 1000) {
+            if (++currentTreeIndex >= 4) {
+                currentTreeIndex = 0;
+            }
+            treeAnimationClock.restart();
+        }
+        for (int i = 0; i < entities.size(); ++i) {
+            entities[i].r.x += entities[i].offsetP.x + mouseOffsetX;
+            entities[i].r.y += entities[i].offsetP.y;
+            if (entities[i].entityType == EntityType::Leaf) {
+                SDL_RenderCopyF(renderer, leafT, 0, &entities[i].r);
+            }
+            else if (entities[i].entityType == EntityType::Grape) {
+                SDL_RenderCopyF(renderer, grapeT, 0, &entities[i].r);
+            }
+            entities[i].r.x -= entities[i].offsetP.x + mouseOffsetX;
+            entities[i].r.y -= entities[i].offsetP.y;
         }
         scoreText.draw(renderer);
         SDL_RenderCopyF(renderer, shopT, 0, &shopR);
@@ -841,6 +888,8 @@ int main(int argc, char* argv[])
     backArrowT = IMG_LoadTexture(renderer, "res/backArrow.png");
     buyT = IMG_LoadTexture(renderer, "res/buy.png");
     leafWithSprayerT = IMG_LoadTexture(renderer, "res/leafWithSprayer.png");
+    vineT = IMG_LoadTexture(renderer, "res/vine.png");
+    grapeT = IMG_LoadTexture(renderer, "res/grape.png");
     josephKosmaM = Mix_LoadMUS("res/autumnLeavesJosephKosma.mp3");
     antonioVivaldiM = Mix_LoadMUS("res/jesienAntonioVivaldi.mp3");
     Mix_PlayMusic(josephKosmaM, 1);
@@ -856,6 +905,10 @@ int main(int argc, char* argv[])
     tree3R.h = 32;
     tree3R.x = treeR.x + treeR.w + 20;
     tree3R.y = windowHeight - treeR.h - 50;
+    grapeTreeR.w = 32;
+    grapeTreeR.h = 32;
+    grapeTreeR.x = tree3R.x + tree3R.w + 20;
+    grapeTreeR.y = tree3R.y;
     scoreText.setText(renderer, robotoF, 0);
     scoreText.dstR.w = 50;
     scoreText.dstR.h = 30;

@@ -496,6 +496,7 @@ struct Entity {
 enum class State {
     Gameplay,
     Shop,
+    Intro,
 };
 
 struct Shop {
@@ -522,8 +523,20 @@ enum class Music {
     AntonioVivaldi,
 };
 
+enum class Motion {
+    Left,
+    Right,
+};
+
+struct Intro {
+    Clock introClock;
+    SDL_FRect leafR{};
+    Motion leafMotion = Motion::Right;
+    int leafAngle = 0;
+};
+
 std::string prefPath;
-SDL_Texture* leafT;
+SDL_Texture* leavesT;
 SDL_Texture* treeT;
 SDL_Texture* tree1T;
 SDL_Texture* tree2T;
@@ -542,6 +555,7 @@ SDL_Texture* carrotT;
 SDL_Texture* soilT;
 SDL_Texture* mutedT;
 SDL_Texture* soundT;
+SDL_Texture* leafT;
 Mix_Music* josephKosmaM;
 Mix_Music* antonioVivaldiM;
 int currentTreeIndex = 0;
@@ -564,7 +578,7 @@ Clock carrotClock;
 Text scoreText;
 SDL_FRect shopR;
 Shop shop;
-State state = State::Gameplay;
+State state = State::Intro;
 int trees = 1;
 int leafSpawnDelayInMs = LEAF_INIT_SPAWN_DELAY_IN_MS;
 Clock leafRotClock;
@@ -576,6 +590,7 @@ int appleSpawnDelayInMs = APPLE_INIT_SPAWN_DELAY_IN_MS;
 int bananaSpawnDelayInMs = BANANA_INIT_SPAWN_DELAY_IN_MS;
 int carrotSpawnDelayInMs = CARROT_INIT_SPAWN_DELAY_IN_MS;
 bool isMuted = false;
+Intro intro;
 
 void saveData()
 {
@@ -589,8 +604,10 @@ void saveData()
     leafSpawnDelayInMsNode.append_child(pugi::node_pcdata).set_value(std::to_string(leafSpawnDelayInMs).c_str());
     pugi::xml_node leafRotDelayInMsNode = rootNode.append_child("leafRotDelayInMs");
     leafRotDelayInMsNode.append_child(pugi::node_pcdata).set_value(std::to_string(leafRotDelayInMs).c_str());
+    pugi::xml_node isMutedNode = rootNode.append_child("isMuted");
+    isMutedNode.append_child(pugi::node_pcdata).set_value(std::to_string(isMuted).c_str());
     doc.save_file((prefPath + "data.xml").c_str());
-    // TODO: Save isMuted
+    // TODO: When adding emscripten add their saveing
 }
 
 void readData()
@@ -602,6 +619,7 @@ void readData()
     trees = rootNode.child("trees").text().as_int(1);
     leafSpawnDelayInMs = rootNode.child("leafSpawnDelayInMs").text().as_int(LEAF_INIT_SPAWN_DELAY_IN_MS);
     leafRotDelayInMs = rootNode.child("leafRotDelayInMs").text().as_int(LEAF_ROT_INIT_DELAY_IN_MS);
+    isMuted = rootNode.child("isMuted").text().as_bool();
 }
 
 void muteMusicAndSounds()
@@ -634,7 +652,59 @@ void mainLoop()
             Mix_PlayMusic(josephKosmaM, 1);
         }
     }
-    if (state == State::Gameplay) {
+    if (state == State::Intro) {
+        SDL_Event event;
+        while (SDL_PollEvent(&event)) {
+            if (event.type == SDL_QUIT || event.type == SDL_KEYDOWN && event.key.keysym.scancode == SDL_SCANCODE_ESCAPE) {
+                running = false;
+                // TODO: On mobile remember to use eventWatch function (it doesn't reach this code when terminating)
+            }
+            if (event.type == SDL_WINDOWEVENT && event.window.event == SDL_WINDOWEVENT_RESIZED) {
+                SDL_RenderSetScale(renderer, event.window.data1 / (float)windowWidth, event.window.data2 / (float)windowHeight);
+            }
+            if (event.type == SDL_KEYDOWN) {
+                keys[event.key.keysym.scancode] = true;
+            }
+            if (event.type == SDL_KEYUP) {
+                keys[event.key.keysym.scancode] = false;
+            }
+            if (event.type == SDL_MOUSEBUTTONDOWN) {
+                buttons[event.button.button] = true;
+            }
+            if (event.type == SDL_MOUSEBUTTONUP) {
+                buttons[event.button.button] = false;
+            }
+            if (event.type == SDL_MOUSEMOTION) {
+                float scaleX, scaleY;
+                SDL_RenderGetScale(renderer, &scaleX, &scaleY);
+                mousePos.x = event.motion.x / scaleX;
+                mousePos.y = event.motion.y / scaleY;
+                realMousePos.x = event.motion.x;
+                realMousePos.y = event.motion.y;
+            }
+        }
+        if (intro.introClock.getElapsedTime() > 1000) {
+            state = State::Gameplay;
+        }
+        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
+        SDL_RenderClear(renderer);
+        SDL_RenderCopyExF(renderer, leafT, 0, &intro.leafR, intro.leafAngle, 0, SDL_FLIP_NONE);
+        if (intro.leafMotion == Motion::Right) {
+            ++intro.leafAngle;
+            if (intro.leafAngle == 75) {
+                intro.leafMotion = Motion::Left;
+            }
+        }
+        else if (intro.leafMotion == Motion::Left) {
+            --intro.leafAngle;
+            if (intro.leafAngle == -75) {
+                intro.leafMotion = Motion::Right;
+            }
+        }
+        SDL_RenderPresent(renderer);
+        SDL_Delay(8);
+    }
+    else if (state == State::Gameplay) {
         SDL_Event event;
         while (SDL_PollEvent(&event)) {
             if (event.type == SDL_QUIT || event.type == SDL_KEYDOWN && event.key.keysym.scancode == SDL_SCANCODE_ESCAPE) {
@@ -870,7 +940,7 @@ void mainLoop()
             entities[i].r.x += entities[i].offsetP.x + mouseOffsetX;
             entities[i].r.y += entities[i].offsetP.y;
             if (entities[i].entityType == EntityType::Leaf) {
-                SDL_RenderCopyF(renderer, leafT, 0, &entities[i].r);
+                SDL_RenderCopyF(renderer, leavesT, 0, &entities[i].r);
             }
             else if (entities[i].entityType == EntityType::Grape) {
                 SDL_RenderCopyF(renderer, grapeT, 0, &entities[i].r);
@@ -963,7 +1033,7 @@ void mainLoop()
             SDL_RenderCopyF(renderer, buyT, 0, &shop.moreTreesBuyR);
         }
         if (leafSpawnDelayInMs > 100) {
-            SDL_RenderCopyF(renderer, leafT, 0, &shop.leafR);
+            SDL_RenderCopyF(renderer, leavesT, 0, &shop.leafR);
             shop.moreLeafsText.draw(renderer);
             shop.moreLeafsPriceText.draw(renderer);
             SDL_RenderCopyF(renderer, buyT, 0, &shop.moreLeafsBuyR);
@@ -995,7 +1065,7 @@ int main(int argc, char* argv[])
     SDL_RenderSetScale(renderer, w / (float)windowWidth, h / (float)windowHeight);
     SDL_AddEventWatch(eventWatch, 0);
     prefPath = SDL_GetPrefPath("NextCodeApps", "AutumnLeafCollector");
-    leafT = IMG_LoadTexture(renderer, "res/leaves.png");
+    leavesT = IMG_LoadTexture(renderer, "res/leaves.png");
     treeT = IMG_LoadTexture(renderer, "res/tree.png");
     tree1T = IMG_LoadTexture(renderer, "res/tree1.png");
     tree2T = IMG_LoadTexture(renderer, "res/tree2.png");
@@ -1014,6 +1084,7 @@ int main(int argc, char* argv[])
     bananaTreeT = IMG_LoadTexture(renderer, "res/bananaTree.png");
     mutedT = IMG_LoadTexture(renderer, "res/muted.png");
     soundT = IMG_LoadTexture(renderer, "res/sound.png");
+    leafT = IMG_LoadTexture(renderer, "res/leaf.png");
     josephKosmaM = Mix_LoadMUS("res/autumnLeavesJosephKosma.mp3");
     antonioVivaldiM = Mix_LoadMUS("res/jesienAntonioVivaldi.mp3");
     Mix_PlayMusic(josephKosmaM, 1);
@@ -1114,6 +1185,10 @@ int main(int argc, char* argv[])
     shop.lessLeafRotBuyR.h = 32;
     shop.lessLeafRotBuyR.x = shop.lessLeafRotPriceText.dstR.x;
     shop.lessLeafRotBuyR.y = shop.lessLeafRotPriceText.dstR.y + shop.lessLeafRotPriceText.dstR.h;
+    intro.leafR.w = 64;
+    intro.leafR.h = 64;
+    intro.leafR.x = windowWidth / 2 - intro.leafR.w / 2;
+    intro.leafR.y = windowHeight / 2 - intro.leafR.h / 2;
     readData();
     leafClock.restart();
     globalClock.restart();
@@ -1122,6 +1197,7 @@ int main(int argc, char* argv[])
     grapeClock.restart();
     appleClock.restart();
     bananaClock.restart();
+    intro.introClock.restart();
 #ifdef __EMSCRIPTEN__
     emscripten_set_main_loop(mainLoop, 0, 1);
 #else

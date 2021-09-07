@@ -1259,10 +1259,10 @@ int main(int argc, char* argv[])
     energyR.h = 15;
     energyR.x = energyText.dstR.x + energyText.dstR.w;
     energyR.y = energyText.dstR.y + energyText.dstR.h / 2 - energyR.h / 2;
-    rotR.w = 128;
-    rotR.h = 128;
-    rotR.x = windowWidth / 2 - rotR.w / 2;
-    rotR.y = windowHeight / 2 - rotR.h / 2;
+    rotR.w = 64;
+    rotR.h = 64;
+    rotR.x = treeR.x + treeR.w/2-rotR.w/2;
+    rotR.y = treeR.y-rotR.h;
     readData();
     leafClock.restart();
     globalClock.restart();

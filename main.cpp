@@ -64,6 +64,9 @@ using namespace std::chrono_literals;
 #define APPLE_INIT_SPAWN_DELAY_IN_MS 5000
 #define BANANA_INIT_SPAWN_DELAY_IN_MS 3000
 #define CARROT_INIT_SPAWN_DELAY_IN_MS 5000
+#define SUNSET_HOUR_BEGIN 7
+#define SUNSET_HOUR_END 17
+#define MAX_ENERGY_INIT 10
 
 int windowWidth = 240;
 int windowHeight = 320;
@@ -510,10 +513,15 @@ struct Shop {
     Text moreLeafsPriceText;
     SDL_FRect moreLeafsBuyR{};
 
-    SDL_FRect lessLeafRotR{};
-    Text lessLeafRotText;
-    Text lessLeafRotPriceText;
-    SDL_FRect lessLeafRotBuyR{};
+    SDL_FRect lessRotR{};
+    Text lessRotText;
+    Text lessRotPriceText;
+    SDL_FRect lessRotBuyR{};
+    
+    SDL_FRect moreEnergyR{};
+    Text moreEnergyText;
+    Text moreEnergyPriceText;
+    SDL_FRect moreEnergyBuyR{};
 
     SDL_FRect backArrowR{};
 };
@@ -556,6 +564,11 @@ SDL_Texture* soilT;
 SDL_Texture* mutedT;
 SDL_Texture* soundT;
 SDL_Texture* leafT;
+SDL_Texture* sunT;
+SDL_Texture* moonT;
+SDL_Texture* energyT;
+SDL_Texture* rotT;
+SDL_Texture* moreEnergyT;
 Mix_Music* josephKosmaM;
 Mix_Music* antonioVivaldiM;
 int currentTreeIndex = 0;
@@ -575,14 +588,15 @@ Clock grapeClock;
 Clock appleClock;
 Clock bananaClock;
 Clock carrotClock;
+Clock timeClock;
 Text scoreText;
 SDL_FRect shopR;
 Shop shop;
 State state = State::Intro;
 int trees = 1;
 int leafSpawnDelayInMs = LEAF_INIT_SPAWN_DELAY_IN_MS;
-Clock leafRotClock;
-int leafRotDelayInMs = LEAF_ROT_INIT_DELAY_IN_MS;
+Clock rotClock;
+int rotDelayInMs = LEAF_ROT_INIT_DELAY_IN_MS;
 Music currentMusic = Music::JosephKosma;
 int mouseOffsetX = 0;
 int grapeSpawnDelayInMs = GRAPE_INIT_SPAWN_DELAY_IN_MS;
@@ -591,6 +605,26 @@ int bananaSpawnDelayInMs = BANANA_INIT_SPAWN_DELAY_IN_MS;
 int carrotSpawnDelayInMs = CARROT_INIT_SPAWN_DELAY_IN_MS;
 bool isMuted = false;
 Intro intro;
+Text hourText;
+int hour = 7;
+SDL_FRect sunR;
+SDL_FRect energyR;
+Text energyText;
+bool shouldShowRotImage = false;
+SDL_FRect rotR;
+int maxEnergy = MAX_ENERGY_INIT;
+
+void muteMusicAndSounds()
+{
+    Mix_VolumeMusic(0);
+    Mix_Volume(-1, 0);
+}
+
+void unmuteMusicAndSounds()
+{
+    Mix_VolumeMusic(128);
+    Mix_Volume(-1, 128);
+}
 
 void saveData()
 {
@@ -603,9 +637,11 @@ void saveData()
     pugi::xml_node leafSpawnDelayInMsNode = rootNode.append_child("leafSpawnDelayInMs");
     leafSpawnDelayInMsNode.append_child(pugi::node_pcdata).set_value(std::to_string(leafSpawnDelayInMs).c_str());
     pugi::xml_node leafRotDelayInMsNode = rootNode.append_child("leafRotDelayInMs");
-    leafRotDelayInMsNode.append_child(pugi::node_pcdata).set_value(std::to_string(leafRotDelayInMs).c_str());
+    leafRotDelayInMsNode.append_child(pugi::node_pcdata).set_value(std::to_string(rotDelayInMs).c_str());
     pugi::xml_node isMutedNode = rootNode.append_child("isMuted");
     isMutedNode.append_child(pugi::node_pcdata).set_value(std::to_string(isMuted).c_str());
+    pugi::xml_node maxEnergyNode = rootNode.append_child("maxEnergy");
+    maxEnergyNode.append_child(pugi::node_pcdata).set_value(std::to_string(maxEnergy).c_str());
     doc.save_file((prefPath + "data.xml").c_str());
     // TODO: When adding emscripten add their saveing
 }
@@ -618,20 +654,13 @@ void readData()
     scoreText.setText(renderer, robotoF, rootNode.child("score").text().as_int());
     trees = rootNode.child("trees").text().as_int(1);
     leafSpawnDelayInMs = rootNode.child("leafSpawnDelayInMs").text().as_int(LEAF_INIT_SPAWN_DELAY_IN_MS);
-    leafRotDelayInMs = rootNode.child("leafRotDelayInMs").text().as_int(LEAF_ROT_INIT_DELAY_IN_MS);
+    rotDelayInMs = rootNode.child("leafRotDelayInMs").text().as_int(LEAF_ROT_INIT_DELAY_IN_MS);
     isMuted = rootNode.child("isMuted").text().as_bool();
-}
-
-void muteMusicAndSounds()
-{
-    Mix_VolumeMusic(0);
-    Mix_Volume(-1, 0);
-}
-
-void unmuteMusicAndSounds()
-{
-    Mix_VolumeMusic(128);
-    Mix_Volume(-1, 128);
+    if (isMuted) {
+        muteMusicAndSounds();
+    }
+    maxEnergy = rootNode.child("maxEnergy").text().as_int(MAX_ENERGY_INIT);
+    energyText.setText(renderer, robotoF, maxEnergy);
 }
 
 void mainLoop()
@@ -725,7 +754,7 @@ void mainLoop()
                 for (int i = 0; i < entities.size(); ++i) {
                     entities[i].r.x += entities[i].offsetP.x + mouseOffsetX;
                     entities[i].r.y += entities[i].offsetP.y;
-                    if (SDL_PointInFRect(&mousePos, &entities[i].r)) {
+                    if (SDL_PointInFRect(&mousePos, &entities[i].r) && std::stoi(energyText.text) > 0 && hour >= SUNSET_HOUR_BEGIN && hour <= SUNSET_HOUR_END) {
                         if (entities[i].entityType == EntityType::Leaf) {
                             scoreText.setText(renderer, robotoF, std::stoi(scoreText.text) + 1);
                         }
@@ -742,6 +771,7 @@ void mainLoop()
                             scoreText.setText(renderer, robotoF, std::stoi(scoreText.text) + 5);
                         }
                         entities.erase(entities.begin() + i--);
+                        energyText.setText(renderer, robotoF, std::stoi(energyText.text) - 1);
                     }
                     else {
                         entities[i].r.x -= entities[i].offsetP.x + mouseOffsetX;
@@ -864,11 +894,28 @@ void mainLoop()
             }
             entities[i].r.y = std::pow(entities[i].r.x, 2) / 28;
         }
-        if (leafRotClock.getElapsedTime() > leafRotDelayInMs) {
+        if (rotClock.getElapsedTime() > rotDelayInMs) {
             if (std::stoi(scoreText.text) > 0) {
                 scoreText.setText(renderer, robotoF, std::stoi(scoreText.text) - 1);
             }
-            leafRotClock.restart();
+            rotClock.restart();
+        }
+        shouldShowRotImage = rotClock.getElapsedTime() + 1000 > rotDelayInMs && std::stoi(scoreText.text) > 0;
+        if (timeClock.getElapsedTime() > 1000) {
+            ++hour;
+            if (hour == 24) {
+                hour = 0;
+            }
+            std::string s = std::to_string(hour);
+            if (hour > 12) {
+                s = std::to_string(hour - 12);
+            }
+            std::string h = s + ((hour <= 12) ? "am" : "pm");
+            hourText.setText(renderer, robotoF, h);
+            timeClock.restart();
+        }
+        if (hour == SUNSET_HOUR_END + 1) {
+            energyText.setText(renderer, robotoF, maxEnergy);
         }
         SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
         SDL_RenderClear(renderer);
@@ -965,6 +1012,18 @@ void mainLoop()
         else {
             SDL_RenderCopyF(renderer, soundT, 0, &soundBtnR);
         }
+        hourText.draw(renderer);
+        if (hour >= 7 && hour <= 17) {
+            SDL_RenderCopyF(renderer, sunT, 0, &sunR);
+        }
+        else {
+            SDL_RenderCopyF(renderer, moonT, 0, &sunR);
+        }
+        energyText.draw(renderer);
+        SDL_RenderCopyF(renderer, energyT, 0, &energyR);
+        if (shouldShowRotImage) {
+            SDL_RenderCopyF(renderer, rotT, 0, &rotR);
+        }
         SDL_RenderPresent(renderer);
     }
     else if (state == State::Shop) {
@@ -1005,10 +1064,16 @@ void mainLoop()
                         }
                     }
                 }
-                if (SDL_PointInFRect(&mousePos, &shop.lessLeafRotBuyR)) {
-                    if (std::stoi(scoreText.text) >= std::stoi(shop.lessLeafRotPriceText.text)) {
-                        scoreText.setText(renderer, robotoF, std::stoi(scoreText.text) - std::stoi(shop.lessLeafRotPriceText.text));
-                        leafRotDelayInMs += 1000;
+                if (SDL_PointInFRect(&mousePos, &shop.lessRotBuyR)) {
+                    if (std::stoi(scoreText.text) >= std::stoi(shop.lessRotPriceText.text)) {
+                        scoreText.setText(renderer, robotoF, std::stoi(scoreText.text) - std::stoi(shop.lessRotPriceText.text));
+                        rotDelayInMs += 1000;
+                    }
+                }
+                if (SDL_PointInFRect(&mousePos, &shop.moreEnergyBuyR)) {
+                    if (std::stoi(scoreText.text) >= std::stoi(shop.moreEnergyPriceText.text)) {
+                        scoreText.setText(renderer, robotoF, std::stoi(scoreText.text) - std::stoi(shop.moreEnergyPriceText.text));
+                        ++maxEnergy;
                     }
                 }
             }
@@ -1038,10 +1103,14 @@ void mainLoop()
             shop.moreLeafsPriceText.draw(renderer);
             SDL_RenderCopyF(renderer, buyT, 0, &shop.moreLeafsBuyR);
         }
-        SDL_RenderCopyF(renderer, leafWithSprayerT, 0, &shop.lessLeafRotR);
-        shop.lessLeafRotText.draw(renderer);
-        shop.lessLeafRotPriceText.draw(renderer);
-        SDL_RenderCopyF(renderer, buyT, 0, &shop.lessLeafRotBuyR);
+        SDL_RenderCopyF(renderer, leafWithSprayerT, 0, &shop.lessRotR);
+        shop.lessRotText.draw(renderer);
+        shop.lessRotPriceText.draw(renderer);
+        SDL_RenderCopyF(renderer, buyT, 0, &shop.lessRotBuyR);
+        SDL_RenderCopyF(renderer, moreEnergyT, 0, &shop.moreEnergyR);
+        shop.moreEnergyText.draw(renderer);
+        shop.moreEnergyPriceText.draw(renderer);
+        SDL_RenderCopyF(renderer, buyT, 0, &shop.moreEnergyBuyR);
         SDL_RenderCopyF(renderer, backArrowT, 0, &shop.backArrowR);
         SDL_RenderPresent(renderer);
     }
@@ -1085,6 +1154,11 @@ int main(int argc, char* argv[])
     mutedT = IMG_LoadTexture(renderer, "res/muted.png");
     soundT = IMG_LoadTexture(renderer, "res/sound.png");
     leafT = IMG_LoadTexture(renderer, "res/leaf.png");
+    sunT = IMG_LoadTexture(renderer, "res/sun.png");
+    moonT = IMG_LoadTexture(renderer, "res/moon.png");
+    energyT = IMG_LoadTexture(renderer, "res/energy.png");
+    rotT = IMG_LoadTexture(renderer, "res/rot.png");
+    moreEnergyT= IMG_LoadTexture(renderer, "res/moreEnergy.png");
     josephKosmaM = Mix_LoadMUS("res/autumnLeavesJosephKosma.mp3");
     antonioVivaldiM = Mix_LoadMUS("res/jesienAntonioVivaldi.mp3");
     Mix_PlayMusic(josephKosmaM, 1);
@@ -1167,37 +1241,78 @@ int main(int argc, char* argv[])
     shop.moreLeafsBuyR.h = 32;
     shop.moreLeafsBuyR.x = shop.moreLeafsPriceText.dstR.x;
     shop.moreLeafsBuyR.y = shop.moreLeafsPriceText.dstR.y + shop.moreLeafsPriceText.dstR.h;
-    shop.lessLeafRotR.w = 32;
-    shop.lessLeafRotR.h = 32;
-    shop.lessLeafRotR.x = shop.treeR.x;
-    shop.lessLeafRotR.y = shop.moreTreesBuyR.y + shop.moreTreesBuyR.h + 5;
-    shop.lessLeafRotText.setText(renderer, robotoF, "Less leaf rot");
-    shop.lessLeafRotText.dstR.w = 85;
-    shop.lessLeafRotText.dstR.h = 35;
-    shop.lessLeafRotText.dstR.x = shop.lessLeafRotR.x;
-    shop.lessLeafRotText.dstR.y = shop.lessLeafRotR.y + shop.lessLeafRotR.h;
-    shop.lessLeafRotPriceText.setText(renderer, robotoF, 100);
-    shop.lessLeafRotPriceText.dstR.w = 70;
-    shop.lessLeafRotPriceText.dstR.h = 35;
-    shop.lessLeafRotPriceText.dstR.x = shop.lessLeafRotText.dstR.x;
-    shop.lessLeafRotPriceText.dstR.y = shop.lessLeafRotText.dstR.y + shop.lessLeafRotText.dstR.h;
-    shop.lessLeafRotBuyR.w = 45;
-    shop.lessLeafRotBuyR.h = 32;
-    shop.lessLeafRotBuyR.x = shop.lessLeafRotPriceText.dstR.x;
-    shop.lessLeafRotBuyR.y = shop.lessLeafRotPriceText.dstR.y + shop.lessLeafRotPriceText.dstR.h;
+    shop.lessRotR.w = 32;
+    shop.lessRotR.h = 32;
+    shop.lessRotR.x = shop.treeR.x;
+    shop.lessRotR.y = shop.moreTreesBuyR.y + shop.moreTreesBuyR.h + 5;
+    shop.lessRotText.setText(renderer, robotoF, "Less rot");
+    shop.lessRotText.dstR.w = 65;
+    shop.lessRotText.dstR.h = 35;
+    shop.lessRotText.dstR.x = shop.lessRotR.x;
+    shop.lessRotText.dstR.y = shop.lessRotR.y + shop.lessRotR.h;
+    shop.lessRotPriceText.setText(renderer, robotoF, 100);
+    shop.lessRotPriceText.dstR.w = 70;
+    shop.lessRotPriceText.dstR.h = 35;
+    shop.lessRotPriceText.dstR.x = shop.lessRotText.dstR.x;
+    shop.lessRotPriceText.dstR.y = shop.lessRotText.dstR.y + shop.lessRotText.dstR.h;
+    shop.lessRotBuyR.w = 45;
+    shop.lessRotBuyR.h = 32;
+    shop.lessRotBuyR.x = shop.lessRotPriceText.dstR.x;
+    shop.lessRotBuyR.y = shop.lessRotPriceText.dstR.y + shop.lessRotPriceText.dstR.h;
+    shop.moreEnergyR.w = 32;
+    shop.moreEnergyR.h = 32;
+    shop.moreEnergyR.x = shop.leafR.x;
+    shop.moreEnergyR.y = shop.moreLeafsBuyR.y + shop.moreLeafsBuyR.h + 5;
+    shop.moreEnergyText.setText(renderer, robotoF, "More energy");
+    shop.moreEnergyText.dstR.w = 85;
+    shop.moreEnergyText.dstR.h = 35;
+    shop.moreEnergyText.dstR.x = shop.moreEnergyR.x;
+    shop.moreEnergyText.dstR.y = shop.moreEnergyR.y + shop.moreEnergyR.h;
+    shop.moreEnergyPriceText.setText(renderer, robotoF, 100);
+    shop.moreEnergyPriceText.dstR.w = 70;
+    shop.moreEnergyPriceText.dstR.h = 35;
+    shop.moreEnergyPriceText.dstR.x = shop.moreEnergyText.dstR.x;
+    shop.moreEnergyPriceText.dstR.y = shop.moreEnergyText.dstR.y + shop.moreEnergyText.dstR.h;
+    shop.moreEnergyBuyR.w = 45;
+    shop.moreEnergyBuyR.h = 32;
+    shop.moreEnergyBuyR.x = shop.moreEnergyPriceText.dstR.x;
+    shop.moreEnergyBuyR.y = shop.moreEnergyPriceText.dstR.y + shop.moreEnergyPriceText.dstR.h;
     intro.leafR.w = 64;
     intro.leafR.h = 64;
     intro.leafR.x = windowWidth / 2 - intro.leafR.w / 2;
     intro.leafR.y = windowHeight / 2 - intro.leafR.h / 2;
+    hourText.setText(renderer, robotoF, "7 am");
+    hourText.dstR.w = 100;
+    hourText.dstR.h = 35;
+    hourText.dstR.x = windowWidth - hourText.dstR.w;
+    hourText.dstR.y = soundBtnR.y + soundBtnR.h;
+    sunR.w = 32;
+    sunR.h = 32;
+    sunR.x = hourText.dstR.x - sunR.w;
+    sunR.y = hourText.dstR.y;
+    energyText.setText(renderer, robotoF, MAX_ENERGY_INIT);
+    energyText.dstR.w = 30;
+    energyText.dstR.h = 20;
+    energyText.dstR.x = 0;
+    energyText.dstR.y = 0;
+    energyR.w = 25;
+    energyR.h = 15;
+    energyR.x = energyText.dstR.x + energyText.dstR.w;
+    energyR.y = energyText.dstR.y + energyText.dstR.h / 2 - energyR.h / 2;
+    rotR.w = 128;
+    rotR.h = 128;
+    rotR.x = windowWidth / 2 - rotR.w / 2;
+    rotR.y = windowHeight / 2 - rotR.h / 2;
     readData();
     leafClock.restart();
     globalClock.restart();
     treeAnimationClock.restart();
-    leafRotClock.restart();
+    rotClock.restart();
     grapeClock.restart();
     appleClock.restart();
     bananaClock.restart();
     intro.introClock.restart();
+    timeClock.restart();
 #ifdef __EMSCRIPTEN__
     emscripten_set_main_loop(mainLoop, 0, 1);
 #else

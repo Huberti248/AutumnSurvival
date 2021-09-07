@@ -969,7 +969,7 @@ void mainLoop()
         SDL_RenderCopyF(renderer, vineT, 0, &grapeTreeR);
         SDL_RenderCopyF(renderer, appleTreeT, 0, &appleTreeR);
         SDL_RenderCopyF(renderer, bananaTreeT, 0, &bananaTreeR);
-        SDL_RenderCopyF(renderer, carrotT, 0, &carrotTreeR);
+        SDL_RenderCopyF(renderer, soilT, 0, &carrotTreeR);
         treeR.x -= mouseOffsetX;
         tree2R.x -= mouseOffsetX;
         tree3R.x -= mouseOffsetX;

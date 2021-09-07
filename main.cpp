@@ -70,6 +70,7 @@ using namespace std::chrono_literals;
 #define SUNSET_HOUR_END 17
 #define MAX_ENERGY_INIT 10
 #define WORM_SPEED 0.1
+#define PLAYER_SPEED 0.1
 
 int windowWidth = 240;
 int windowHeight = 320;
@@ -501,6 +502,12 @@ struct Entity {
     EntityType entityType = EntityType::Leaf;
 };
 
+struct Player {
+    SDL_FRect r{};
+    int dx = 0;
+    int dy = 0;
+};
+
 enum class State {
     Gameplay,
     Shop,
@@ -579,6 +586,8 @@ SDL_Texture* wormT;
 SDL_Texture* potatoT;
 SDL_Texture* pumpkinT;
 SDL_Texture* pumpkinTreeT;
+SDL_Texture* tradeT;
+SDL_Texture* playerT;
 Mix_Music* josephKosmaM;
 Mix_Music* antonioVivaldiM;
 int currentTreeIndex = 0;
@@ -604,6 +613,7 @@ Clock potatoClock;
 Clock pumpkinClock;
 Clock timeClock;
 Clock wormClock;
+Clock tradeClock;
 Text scoreText;
 SDL_FRect shopR;
 Shop shop;
@@ -632,6 +642,8 @@ int maxEnergy = MAX_ENERGY_INIT;
 SDL_FRect houseflyR;
 bool houseflyGoingRight = true;
 std::vector<SDL_FRect> wormRects;
+std::vector<SDL_FRect> tradeRects;
+Player player;
 
 void muteMusicAndSounds()
 {
@@ -980,8 +992,45 @@ void mainLoop()
                 }
             }
         }
+        if (tradeClock.getElapsedTime() > 1000) // TODO: Set it to 20000
+        {
+            tradeRects.push_back(SDL_FRect());
+            tradeRects.back().w = windowWidth;
+            tradeRects.back().h = windowHeight;
+            tradeRects.back().x = 0;
+            tradeRects.back().y = -windowHeight + 1;
+            tradeClock.restart();
+        }
+        for (int i = 0; i < tradeRects.size(); ++i) {
+            tradeRects[i].y += deltaTime;
+            if (!SDL_HasIntersectionF(&tradeRects[i], &windowR)) {
+                tradeRects.erase(tradeRects.begin() + i--);
+                // TODO: Mix prize for each vegetable/fruit (save them to file also)
+            }
+        }
+        player.dx = 0;
+        player.dy = 0;
+        if (keys[SDL_SCANCODE_A]) {
+            player.dx = -1;
+        }
+        else if (keys[SDL_SCANCODE_D]) {
+            player.dx = 1;
+        }
+        if (keys[SDL_SCANCODE_W]) {
+            player.dy = -1;
+        }
+        else if (keys[SDL_SCANCODE_S]) {
+            player.dy = 1;
+        }
+        player.r.x += player.dx * deltaTime * PLAYER_SPEED;
+        player.r.y += player.dy * deltaTime * PLAYER_SPEED;
         SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
         SDL_RenderClear(renderer);
+#if 0 // TODO: Turn it on when done?
+        for (int i = 0; i < tradeRects.size(); ++i) {
+            SDL_RenderCopyF(renderer, tradeT, 0, &tradeRects[i]);
+        }
+#endif
         if (currentTreeIndex == 0) {
             SDL_RenderCopyF(renderer, treeT, 0, &treeR);
         }
@@ -1100,6 +1149,7 @@ void mainLoop()
             houseflyGoingRight = true;
             houseflyR.y = rotR.y + rotR.h - houseflyR.h;
         }
+        SDL_RenderCopyF(renderer, playerT, 0, &player.r);
         SDL_RenderPresent(renderer);
     }
     else if (state == State::Shop) {
@@ -1240,6 +1290,8 @@ int main(int argc, char* argv[])
     potatoT = IMG_LoadTexture(renderer, "res/potato.png");
     pumpkinT = IMG_LoadTexture(renderer, "res/pumpkin.png");
     pumpkinTreeT = IMG_LoadTexture(renderer, "res/pumpkinTree.png");
+    tradeT = IMG_LoadTexture(renderer, "res/trade.png");
+    playerT = IMG_LoadTexture(renderer, "res/player.png");
     josephKosmaM = Mix_LoadMUS("res/autumnLeavesJosephKosma.mp3");
     antonioVivaldiM = Mix_LoadMUS("res/jesienAntonioVivaldi.mp3");
     Mix_PlayMusic(josephKosmaM, 1);
@@ -1380,6 +1432,10 @@ int main(int argc, char* argv[])
     houseflyR.h = 32;
     houseflyR.x = rotR.x;
     houseflyR.y = rotR.y + rotR.h - houseflyR.h;
+    player.r.w = 32;
+    player.r.h = 32;
+    player.r.x = windowWidth / 2 - player.r.w / 2;
+    player.r.y = windowHeight / 2 - player.r.h / 2;
     readData();
     leafClock.restart();
     globalClock.restart();

@@ -64,6 +64,8 @@ using namespace std::chrono_literals;
 #define APPLE_INIT_SPAWN_DELAY_IN_MS 5000
 #define BANANA_INIT_SPAWN_DELAY_IN_MS 3000
 #define CARROT_INIT_SPAWN_DELAY_IN_MS 5000
+#define POTATO_INIT_SPAWN_DELAY_IN_MS 7000
+#define PUMPKIN_INIT_SPAWN_DELAY_IN_MS 3000
 #define SUNSET_HOUR_BEGIN 7
 #define SUNSET_HOUR_END 17
 #define MAX_ENERGY_INIT 10
@@ -488,6 +490,8 @@ enum class EntityType {
     Apple,
     Banana,
     Carrot,
+    Potato,
+    Pumpkin,
 };
 
 struct Entity {
@@ -572,6 +576,9 @@ SDL_Texture* rotT;
 SDL_Texture* moreEnergyT;
 SDL_Texture* houseflyT;
 SDL_Texture* wormT;
+SDL_Texture* potatoT;
+SDL_Texture* pumpkinT;
+SDL_Texture* pumpkinTreeT;
 Mix_Music* josephKosmaM;
 Mix_Music* antonioVivaldiM;
 int currentTreeIndex = 0;
@@ -582,6 +589,8 @@ SDL_FRect grapeTreeR;
 SDL_FRect appleTreeR;
 SDL_FRect bananaTreeR;
 SDL_FRect carrotTreeR;
+SDL_FRect potatoTreeR;
+SDL_FRect pumpkinTreeR;
 SDL_FRect soundBtnR;
 std::vector<Entity> entities;
 Clock leafClock;
@@ -591,6 +600,8 @@ Clock grapeClock;
 Clock appleClock;
 Clock bananaClock;
 Clock carrotClock;
+Clock potatoClock;
+Clock pumpkinClock;
 Clock timeClock;
 Clock wormClock;
 Text scoreText;
@@ -606,6 +617,8 @@ int grapeSpawnDelayInMs = GRAPE_INIT_SPAWN_DELAY_IN_MS;
 int appleSpawnDelayInMs = APPLE_INIT_SPAWN_DELAY_IN_MS;
 int bananaSpawnDelayInMs = BANANA_INIT_SPAWN_DELAY_IN_MS;
 int carrotSpawnDelayInMs = CARROT_INIT_SPAWN_DELAY_IN_MS;
+int potatoSpawnDelayInMs = POTATO_INIT_SPAWN_DELAY_IN_MS;
+int pumpkinSpawnDelayInMs = PUMPKIN_INIT_SPAWN_DELAY_IN_MS;
 bool isMuted = false;
 Intro intro;
 Text hourText;
@@ -776,6 +789,12 @@ void mainLoop()
                         else if (entities[i].entityType == EntityType::Carrot) {
                             scoreText.setText(renderer, robotoF, std::stoi(scoreText.text) + 5);
                         }
+                        else if (entities[i].entityType == EntityType::Potato) {
+                            scoreText.setText(renderer, robotoF, std::stoi(scoreText.text) + 7);
+                        }
+                        else if (entities[i].entityType == EntityType::Pumpkin) {
+                            scoreText.setText(renderer, robotoF, std::stoi(scoreText.text) + 3);
+                        }
                         entities.erase(entities.begin() + i--);
                         energyText.setText(renderer, robotoF, std::stoi(energyText.text) - 1);
                     }
@@ -878,6 +897,30 @@ void mainLoop()
             entities.back().entityType = EntityType::Carrot;
             carrotClock.restart();
         }
+        if (potatoClock.getElapsedTime() > potatoSpawnDelayInMs) {
+            entities.push_back(Entity());
+            entities.back().r.w = 32;
+            entities.back().r.h = 32;
+            entities.back().r.x = 0;
+            entities.back().r.y = 0;
+            entities.back().direction = (Direction)random(0, 1);
+            entities.back().offsetP.x = potatoTreeR.x + potatoTreeR.w / 2 - entities.back().r.w / 2;
+            entities.back().offsetP.y = potatoTreeR.y - entities.back().r.h / 2;
+            entities.back().entityType = EntityType::Potato;
+            potatoClock.restart();
+        }
+        if (pumpkinClock.getElapsedTime() > pumpkinSpawnDelayInMs) {
+            entities.push_back(Entity());
+            entities.back().r.w = 32;
+            entities.back().r.h = 32;
+            entities.back().r.x = 0;
+            entities.back().r.y = 0;
+            entities.back().direction = (Direction)random(0, 1);
+            entities.back().offsetP.x = pumpkinTreeR.x + pumpkinTreeR.w / 2 - entities.back().r.w / 2;
+            entities.back().offsetP.y = pumpkinTreeR.y - entities.back().r.h / 2;
+            entities.back().entityType = EntityType::Pumpkin;
+            pumpkinClock.restart();
+        }
         for (int i = 0; i < entities.size(); ++i) {
             if (entities[i].direction == Direction::Right) {
                 entities[i].r.x += 0.01 * deltaTime;
@@ -910,8 +953,7 @@ void mainLoop()
         if (hour == SUNSET_HOUR_END + 1) {
             energyText.setText(renderer, robotoF, maxEnergy);
         }
-        if (wormClock.getElapsedTime() > 15000)
-        {
+        if (wormClock.getElapsedTime() > 15000) {
             wormRects.push_back(SDL_FRect());
             wormRects.back().w = 128;
             wormRects.back().h = 128;
@@ -984,6 +1026,8 @@ void mainLoop()
         SDL_RenderCopyF(renderer, appleTreeT, 0, &appleTreeR);
         SDL_RenderCopyF(renderer, bananaTreeT, 0, &bananaTreeR);
         SDL_RenderCopyF(renderer, soilT, 0, &carrotTreeR);
+        SDL_RenderCopyF(renderer, soilT, 0, &potatoTreeR);
+        SDL_RenderCopyF(renderer, pumpkinTreeT, 0, &pumpkinTreeR);
         if (treeAnimationClock.getElapsedTime() > 1000) {
             if (++currentTreeIndex >= 4) {
                 currentTreeIndex = 0;
@@ -1007,6 +1051,12 @@ void mainLoop()
             }
             else if (entities[i].entityType == EntityType::Carrot) {
                 SDL_RenderCopyF(renderer, carrotT, 0, &entities[i].r);
+            }
+            else if (entities[i].entityType == EntityType::Potato) {
+                SDL_RenderCopyF(renderer, potatoT, 0, &entities[i].r);
+            }
+            else if (entities[i].entityType == EntityType::Pumpkin) {
+                SDL_RenderCopyF(renderer, pumpkinT, 0, &entities[i].r);
             }
             entities[i].r.x -= entities[i].offsetP.x;
             entities[i].r.y -= entities[i].offsetP.y;
@@ -1187,6 +1237,9 @@ int main(int argc, char* argv[])
     moreEnergyT = IMG_LoadTexture(renderer, "res/moreEnergy.png");
     houseflyT = IMG_LoadTexture(renderer, "res/housefly.png");
     wormT = IMG_LoadTexture(renderer, "res/worm.png");
+    potatoT = IMG_LoadTexture(renderer, "res/potato.png");
+    pumpkinT = IMG_LoadTexture(renderer, "res/pumpkin.png");
+    pumpkinTreeT = IMG_LoadTexture(renderer, "res/pumpkinTree.png");
     josephKosmaM = Mix_LoadMUS("res/autumnLeavesJosephKosma.mp3");
     antonioVivaldiM = Mix_LoadMUS("res/jesienAntonioVivaldi.mp3");
     Mix_PlayMusic(josephKosmaM, 1);
@@ -1206,6 +1259,10 @@ int main(int argc, char* argv[])
     carrotTreeR.x = appleTreeR.x + appleTreeR.w + 20;
     grapeTreeR = appleTreeR;
     grapeTreeR.y = appleTreeR.y + appleTreeR.h + 20;
+    potatoTreeR = grapeTreeR;
+    potatoTreeR.x = grapeTreeR.x - potatoTreeR.w - 20;
+    pumpkinTreeR = grapeTreeR;
+    pumpkinTreeR.x = grapeTreeR.x + grapeTreeR.w + 20;
     shopR.w = 48;
     shopR.h = 48;
     shopR.x = windowWidth - shopR.w * 2;
@@ -1334,6 +1391,8 @@ int main(int argc, char* argv[])
     intro.introClock.restart();
     timeClock.restart();
     wormClock.restart();
+    potatoClock.restart();
+    pumpkinClock.restart();
 #ifdef __EMSCRIPTEN__
     emscripten_set_main_loop(mainLoop, 0, 1);
 #else

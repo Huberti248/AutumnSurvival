@@ -67,6 +67,7 @@ using namespace std::chrono_literals;
 #define SUNSET_HOUR_BEGIN 7
 #define SUNSET_HOUR_END 17
 #define MAX_ENERGY_INIT 10
+#define WORM_SPEED 0.1
 
 int windowWidth = 240;
 int windowHeight = 320;
@@ -570,6 +571,7 @@ SDL_Texture* energyT;
 SDL_Texture* rotT;
 SDL_Texture* moreEnergyT;
 SDL_Texture* houseflyT;
+SDL_Texture* wormT;
 Mix_Music* josephKosmaM;
 Mix_Music* antonioVivaldiM;
 int currentTreeIndex = 0;
@@ -590,6 +592,7 @@ Clock appleClock;
 Clock bananaClock;
 Clock carrotClock;
 Clock timeClock;
+Clock wormClock;
 Text scoreText;
 SDL_FRect shopR;
 Shop shop;
@@ -615,6 +618,7 @@ SDL_FRect rotR;
 int maxEnergy = MAX_ENERGY_INIT;
 SDL_FRect houseflyR;
 bool houseflyGoingRight = true;
+std::vector<SDL_FRect> wormRects;
 
 void muteMusicAndSounds()
 {
@@ -906,6 +910,34 @@ void mainLoop()
         if (hour == SUNSET_HOUR_END + 1) {
             energyText.setText(renderer, robotoF, maxEnergy);
         }
+        if (wormClock.getElapsedTime() > 15000)
+        {
+            wormRects.push_back(SDL_FRect());
+            wormRects.back().w = 128;
+            wormRects.back().h = 128;
+            wormRects.back().x = windowWidth;
+            wormRects.back().y = windowHeight / 2 - wormRects.back().h / 2 + 50;
+            wormClock.restart();
+        }
+        for (int i = 0; i < wormRects.size(); ++i) {
+            wormRects[i].x += -WORM_SPEED * deltaTime;
+            if (!SDL_HasIntersectionF(&windowR, &wormRects[i])) {
+                wormRects.erase(wormRects.begin() + i--);
+            }
+        }
+        for (int i = 0; i < wormRects.size(); ++i) {
+            for (int j = 0; j < entities.size(); ++j) {
+                entities[j].r.x += entities[j].offsetP.x;
+                entities[j].r.y += entities[j].offsetP.y;
+                if (SDL_HasIntersectionF(&entities[j].r, &wormRects[i])) {
+                    entities.erase(entities.begin() + j--);
+                }
+                else {
+                    entities[j].r.x += entities[j].offsetP.x;
+                    entities[j].r.y += entities[j].offsetP.y;
+                }
+            }
+        }
         SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
         SDL_RenderClear(renderer);
         if (currentTreeIndex == 0) {
@@ -978,6 +1010,9 @@ void mainLoop()
             }
             entities[i].r.x -= entities[i].offsetP.x;
             entities[i].r.y -= entities[i].offsetP.y;
+        }
+        for (int i = 0; i < wormRects.size(); ++i) {
+            SDL_RenderCopyF(renderer, wormT, 0, &wormRects[i]);
         }
         scoreText.draw(renderer);
         SDL_RenderCopyF(renderer, shopT, 0, &shopR);
@@ -1151,6 +1186,7 @@ int main(int argc, char* argv[])
     rotT = IMG_LoadTexture(renderer, "res/rot.png");
     moreEnergyT = IMG_LoadTexture(renderer, "res/moreEnergy.png");
     houseflyT = IMG_LoadTexture(renderer, "res/housefly.png");
+    wormT = IMG_LoadTexture(renderer, "res/worm.png");
     josephKosmaM = Mix_LoadMUS("res/autumnLeavesJosephKosma.mp3");
     antonioVivaldiM = Mix_LoadMUS("res/jesienAntonioVivaldi.mp3");
     Mix_PlayMusic(josephKosmaM, 1);
@@ -1297,6 +1333,7 @@ int main(int argc, char* argv[])
     bananaClock.restart();
     intro.introClock.restart();
     timeClock.restart();
+    wormClock.restart();
 #ifdef __EMSCRIPTEN__
     emscripten_set_main_loop(mainLoop, 0, 1);
 #else

@@ -569,6 +569,7 @@ SDL_Texture* moonT;
 SDL_Texture* energyT;
 SDL_Texture* rotT;
 SDL_Texture* moreEnergyT;
+SDL_Texture* houseflyT;
 Mix_Music* josephKosmaM;
 Mix_Music* antonioVivaldiM;
 int currentTreeIndex = 0;
@@ -612,6 +613,8 @@ Text energyText;
 bool shouldShowRotImage = false;
 SDL_FRect rotR;
 int maxEnergy = MAX_ENERGY_INIT;
+SDL_FRect houseflyR;
+bool houseflyGoingRight = true;
 
 void muteMusicAndSounds()
 {
@@ -855,7 +858,7 @@ void mainLoop()
             entities.back().r.y = 0;
             entities.back().direction = (Direction)random(0, 1);
             entities.back().offsetP.x = bananaTreeR.x + bananaTreeR.w / 2 - entities.back().r.w / 2;
-            entities.back().offsetP.y = bananaTreeR.y - entities.back().r.h/2;
+            entities.back().offsetP.y = bananaTreeR.y - entities.back().r.h / 2;
             entities.back().entityType = EntityType::Banana;
             bananaClock.restart();
         }
@@ -995,6 +998,22 @@ void mainLoop()
         SDL_RenderCopyF(renderer, energyT, 0, &energyR);
         if (shouldShowRotImage) {
             SDL_RenderCopyF(renderer, rotT, 0, &rotR);
+            SDL_RenderCopyF(renderer, houseflyT, 0, &houseflyR);
+            if (houseflyGoingRight) {
+                houseflyR.x += 0.1 * deltaTime;
+                if (houseflyR.x + houseflyR.w >= rotR.x + rotR.w) {
+                    houseflyGoingRight = false;
+                    houseflyR.y -= 20;
+                }
+            }
+            else {
+                houseflyR.x -= 0.05 * deltaTime;
+            }
+        }
+        else {
+            houseflyR.x = rotR.x;
+            houseflyGoingRight = true;
+            houseflyR.y = rotR.y + rotR.h - houseflyR.h;
         }
         SDL_RenderPresent(renderer);
     }
@@ -1131,6 +1150,7 @@ int main(int argc, char* argv[])
     energyT = IMG_LoadTexture(renderer, "res/energy.png");
     rotT = IMG_LoadTexture(renderer, "res/rot.png");
     moreEnergyT = IMG_LoadTexture(renderer, "res/moreEnergy.png");
+    houseflyT = IMG_LoadTexture(renderer, "res/housefly.png");
     josephKosmaM = Mix_LoadMUS("res/autumnLeavesJosephKosma.mp3");
     antonioVivaldiM = Mix_LoadMUS("res/jesienAntonioVivaldi.mp3");
     Mix_PlayMusic(josephKosmaM, 1);
@@ -1261,8 +1281,12 @@ int main(int argc, char* argv[])
     energyR.y = energyText.dstR.y + energyText.dstR.h / 2 - energyR.h / 2;
     rotR.w = 64;
     rotR.h = 64;
-    rotR.x = treeR.x + treeR.w/2-rotR.w/2;
-    rotR.y = treeR.y-rotR.h;
+    rotR.x = treeR.x + treeR.w / 2 - rotR.w / 2;
+    rotR.y = treeR.y - rotR.h;
+    houseflyR.w = 32;
+    houseflyR.h = 32;
+    houseflyR.x = rotR.x;
+    houseflyR.y = rotR.y + rotR.h - houseflyR.h;
     readData();
     leafClock.restart();
     globalClock.restart();

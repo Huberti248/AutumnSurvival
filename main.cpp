@@ -58,8 +58,7 @@ using namespace std::chrono_literals;
 //360 x 640 (Galaxy S5)
 //640 x 480 (480i - Smallest PC monitor)
 
-#define LEAF_INIT_SPAWN_DELAY_IN_MS 1000
-#define LEAF_ROT_INIT_DELAY_IN_MS 5000
+#define ROT_INIT_DELAY_IN_MS 5000
 #define GRAPE_INIT_SPAWN_DELAY_IN_MS 10000
 #define APPLE_INIT_SPAWN_DELAY_IN_MS 5000
 #define BANANA_INIT_SPAWN_DELAY_IN_MS 3000
@@ -69,7 +68,6 @@ using namespace std::chrono_literals;
 #define SUNSET_HOUR_BEGIN 7
 #define SUNSET_HOUR_END 17
 #define MAX_ENERGY_INIT 10
-#define WORM_SPEED 0.1
 #define PLAYER_SPEED 0.1
 
 int windowWidth = 240;
@@ -515,16 +513,6 @@ enum class State {
 };
 
 struct Shop {
-    SDL_FRect treeR{};
-    Text moreTreesText;
-    Text moreTreesPriceText;
-    SDL_FRect moreTreesBuyR{};
-
-    SDL_FRect leafR{};
-    Text moreLeafsText;
-    Text moreLeafsPriceText;
-    SDL_FRect moreLeafsBuyR{};
-
     SDL_FRect lessRotR{};
     Text lessRotText;
     Text lessRotPriceText;
@@ -590,10 +578,6 @@ SDL_Texture* tradeT;
 SDL_Texture* playerT;
 Mix_Music* josephKosmaM;
 Mix_Music* antonioVivaldiM;
-int currentTreeIndex = 0;
-SDL_FRect treeR;
-SDL_FRect tree2R;
-SDL_FRect tree3R;
 SDL_FRect grapeTreeR;
 SDL_FRect appleTreeR;
 SDL_FRect bananaTreeR;
@@ -604,7 +588,6 @@ SDL_FRect soundBtnR;
 std::vector<Entity> entities;
 Clock leafClock;
 Clock globalClock;
-Clock treeAnimationClock;
 Clock grapeClock;
 Clock appleClock;
 Clock bananaClock;
@@ -612,16 +595,13 @@ Clock carrotClock;
 Clock potatoClock;
 Clock pumpkinClock;
 Clock timeClock;
-Clock wormClock;
 Clock tradeClock;
 Text scoreText;
 SDL_FRect shopR;
 Shop shop;
 State state = State::Intro;
-int trees = 1;
-int leafSpawnDelayInMs = LEAF_INIT_SPAWN_DELAY_IN_MS;
 Clock rotClock;
-int rotDelayInMs = LEAF_ROT_INIT_DELAY_IN_MS;
+int rotDelayInMs = ROT_INIT_DELAY_IN_MS;
 Music currentMusic = Music::JosephKosma;
 int grapeSpawnDelayInMs = GRAPE_INIT_SPAWN_DELAY_IN_MS;
 int appleSpawnDelayInMs = APPLE_INIT_SPAWN_DELAY_IN_MS;
@@ -641,7 +621,6 @@ SDL_FRect rotR;
 int maxEnergy = MAX_ENERGY_INIT;
 SDL_FRect houseflyR;
 bool houseflyGoingRight = true;
-std::vector<SDL_FRect> wormRects;
 std::vector<SDL_FRect> tradeRects;
 Player player;
 
@@ -663,12 +642,8 @@ void saveData()
     pugi::xml_node rootNode = doc.append_child("root");
     pugi::xml_node scoreNode = rootNode.append_child("score");
     scoreNode.append_child(pugi::node_pcdata).set_value(scoreText.text.c_str());
-    pugi::xml_node treesNode = rootNode.append_child("trees");
-    treesNode.append_child(pugi::node_pcdata).set_value(std::to_string(trees).c_str());
-    pugi::xml_node leafSpawnDelayInMsNode = rootNode.append_child("leafSpawnDelayInMs");
-    leafSpawnDelayInMsNode.append_child(pugi::node_pcdata).set_value(std::to_string(leafSpawnDelayInMs).c_str());
-    pugi::xml_node leafRotDelayInMsNode = rootNode.append_child("leafRotDelayInMs");
-    leafRotDelayInMsNode.append_child(pugi::node_pcdata).set_value(std::to_string(rotDelayInMs).c_str());
+    pugi::xml_node rotDelayInMsNode = rootNode.append_child("rotDelayInMs");
+    rotDelayInMsNode.append_child(pugi::node_pcdata).set_value(std::to_string(rotDelayInMs).c_str());
     pugi::xml_node isMutedNode = rootNode.append_child("isMuted");
     isMutedNode.append_child(pugi::node_pcdata).set_value(std::to_string(isMuted).c_str());
     pugi::xml_node maxEnergyNode = rootNode.append_child("maxEnergy");
@@ -683,9 +658,7 @@ void readData()
     doc.load_file((prefPath + "data.xml").c_str());
     pugi::xml_node rootNode = doc.child("root");
     scoreText.setText(renderer, robotoF, rootNode.child("score").text().as_int());
-    trees = rootNode.child("trees").text().as_int(1);
-    leafSpawnDelayInMs = rootNode.child("leafSpawnDelayInMs").text().as_int(LEAF_INIT_SPAWN_DELAY_IN_MS);
-    rotDelayInMs = rootNode.child("leafRotDelayInMs").text().as_int(LEAF_ROT_INIT_DELAY_IN_MS);
+    rotDelayInMs = rootNode.child("leafRotDelayInMs").text().as_int(ROT_INIT_DELAY_IN_MS);
     isMuted = rootNode.child("isMuted").text().as_bool();
     if (isMuted) {
         muteMusicAndSounds();
@@ -782,39 +755,6 @@ void mainLoop()
             }
             if (event.type == SDL_MOUSEBUTTONDOWN) {
                 buttons[event.button.button] = true;
-                for (int i = 0; i < entities.size(); ++i) {
-                    entities[i].r.x += entities[i].offsetP.x;
-                    entities[i].r.y += entities[i].offsetP.y;
-                    if (SDL_PointInFRect(&mousePos, &entities[i].r) && std::stoi(energyText.text) > 0 && hour >= SUNSET_HOUR_BEGIN && hour <= SUNSET_HOUR_END) {
-                        if (entities[i].entityType == EntityType::Leaf) {
-                            scoreText.setText(renderer, robotoF, std::stoi(scoreText.text) + 1);
-                        }
-                        else if (entities[i].entityType == EntityType::Grape) {
-                            scoreText.setText(renderer, robotoF, std::stoi(scoreText.text) + 10);
-                        }
-                        else if (entities[i].entityType == EntityType::Apple) {
-                            scoreText.setText(renderer, robotoF, std::stoi(scoreText.text) + 5);
-                        }
-                        else if (entities[i].entityType == EntityType::Banana) {
-                            scoreText.setText(renderer, robotoF, std::stoi(scoreText.text) + 3);
-                        }
-                        else if (entities[i].entityType == EntityType::Carrot) {
-                            scoreText.setText(renderer, robotoF, std::stoi(scoreText.text) + 5);
-                        }
-                        else if (entities[i].entityType == EntityType::Potato) {
-                            scoreText.setText(renderer, robotoF, std::stoi(scoreText.text) + 7);
-                        }
-                        else if (entities[i].entityType == EntityType::Pumpkin) {
-                            scoreText.setText(renderer, robotoF, std::stoi(scoreText.text) + 3);
-                        }
-                        entities.erase(entities.begin() + i--);
-                        energyText.setText(renderer, robotoF, std::stoi(energyText.text) - 1);
-                    }
-                    else {
-                        entities[i].r.x -= entities[i].offsetP.x;
-                        entities[i].r.y -= entities[i].offsetP.y;
-                    }
-                }
                 if (SDL_PointInFRect(&mousePos, &shopR)) {
                     state = State::Shop;
                 }
@@ -839,99 +779,6 @@ void mainLoop()
                 realMousePos.x = event.motion.x;
                 realMousePos.y = event.motion.y;
             }
-        }
-        if (leafClock.getElapsedTime() > leafSpawnDelayInMs) {
-            entities.push_back(Entity());
-            entities.back().r.w = 32;
-            entities.back().r.h = 32;
-            entities.back().r.x = 0;
-            entities.back().r.y = 0;
-            entities.back().direction = (Direction)random(0, 1);
-            entities.back().offsetP.x = 100;
-            entities.back().offsetP.y = 130;
-            if (trees > 1) {
-                entities.push_back(entities.back());
-                entities.back().direction = (Direction)random(0, 1);
-                entities.back().offsetP.x = 50;
-            }
-            if (trees > 2) {
-                entities.push_back(entities.back());
-                entities.back().direction = (Direction)random(0, 1);
-                entities.back().offsetP.x = 150;
-            }
-            leafClock.restart();
-        }
-        if (grapeClock.getElapsedTime() > grapeSpawnDelayInMs) {
-            entities.push_back(Entity());
-            entities.back().r.w = 32;
-            entities.back().r.h = 32;
-            entities.back().r.x = 0;
-            entities.back().r.y = 0;
-            entities.back().direction = (Direction)random(0, 1);
-            entities.back().offsetP.x = grapeTreeR.x + grapeTreeR.w / 2 - entities.back().r.w / 2;
-            entities.back().offsetP.y = grapeTreeR.y - entities.back().r.h / 2;
-            entities.back().entityType = EntityType::Grape;
-            grapeClock.restart();
-        }
-        if (appleClock.getElapsedTime() > appleSpawnDelayInMs) {
-            entities.push_back(Entity());
-            entities.back().r.w = 32;
-            entities.back().r.h = 32;
-            entities.back().r.x = 0;
-            entities.back().r.y = 0;
-            entities.back().direction = (Direction)random(0, 1);
-            entities.back().offsetP.x = appleTreeR.x + appleTreeR.w / 2 - entities.back().r.w / 2;
-            entities.back().offsetP.y = appleTreeR.y - entities.back().r.h / 2;
-            entities.back().entityType = EntityType::Apple;
-            appleClock.restart();
-        }
-        if (bananaClock.getElapsedTime() > bananaSpawnDelayInMs) {
-            entities.push_back(Entity());
-            entities.back().r.w = 32;
-            entities.back().r.h = 32;
-            entities.back().r.x = 0;
-            entities.back().r.y = 0;
-            entities.back().direction = (Direction)random(0, 1);
-            entities.back().offsetP.x = bananaTreeR.x + bananaTreeR.w / 2 - entities.back().r.w / 2;
-            entities.back().offsetP.y = bananaTreeR.y - entities.back().r.h / 2;
-            entities.back().entityType = EntityType::Banana;
-            bananaClock.restart();
-        }
-        if (carrotClock.getElapsedTime() > carrotSpawnDelayInMs) {
-            entities.push_back(Entity());
-            entities.back().r.w = 32;
-            entities.back().r.h = 32;
-            entities.back().r.x = 0;
-            entities.back().r.y = 0;
-            entities.back().direction = (Direction)random(0, 1);
-            entities.back().offsetP.x = carrotTreeR.x + carrotTreeR.w / 2 - entities.back().r.w / 2;
-            entities.back().offsetP.y = carrotTreeR.y - entities.back().r.h / 2;
-            entities.back().entityType = EntityType::Carrot;
-            carrotClock.restart();
-        }
-        if (potatoClock.getElapsedTime() > potatoSpawnDelayInMs) {
-            entities.push_back(Entity());
-            entities.back().r.w = 32;
-            entities.back().r.h = 32;
-            entities.back().r.x = 0;
-            entities.back().r.y = 0;
-            entities.back().direction = (Direction)random(0, 1);
-            entities.back().offsetP.x = potatoTreeR.x + potatoTreeR.w / 2 - entities.back().r.w / 2;
-            entities.back().offsetP.y = potatoTreeR.y - entities.back().r.h / 2;
-            entities.back().entityType = EntityType::Potato;
-            potatoClock.restart();
-        }
-        if (pumpkinClock.getElapsedTime() > pumpkinSpawnDelayInMs) {
-            entities.push_back(Entity());
-            entities.back().r.w = 32;
-            entities.back().r.h = 32;
-            entities.back().r.x = 0;
-            entities.back().r.y = 0;
-            entities.back().direction = (Direction)random(0, 1);
-            entities.back().offsetP.x = pumpkinTreeR.x + pumpkinTreeR.w / 2 - entities.back().r.w / 2;
-            entities.back().offsetP.y = pumpkinTreeR.y - entities.back().r.h / 2;
-            entities.back().entityType = EntityType::Pumpkin;
-            pumpkinClock.restart();
         }
         for (int i = 0; i < entities.size(); ++i) {
             if (entities[i].direction == Direction::Right) {
@@ -964,33 +811,6 @@ void mainLoop()
         }
         if (hour == SUNSET_HOUR_END + 1) {
             energyText.setText(renderer, robotoF, maxEnergy);
-        }
-        if (wormClock.getElapsedTime() > 15000) {
-            wormRects.push_back(SDL_FRect());
-            wormRects.back().w = 128;
-            wormRects.back().h = 128;
-            wormRects.back().x = windowWidth;
-            wormRects.back().y = windowHeight / 2 - wormRects.back().h / 2 + 50;
-            wormClock.restart();
-        }
-        for (int i = 0; i < wormRects.size(); ++i) {
-            wormRects[i].x += -WORM_SPEED * deltaTime;
-            if (!SDL_HasIntersectionF(&windowR, &wormRects[i])) {
-                wormRects.erase(wormRects.begin() + i--);
-            }
-        }
-        for (int i = 0; i < wormRects.size(); ++i) {
-            for (int j = 0; j < entities.size(); ++j) {
-                entities[j].r.x += entities[j].offsetP.x;
-                entities[j].r.y += entities[j].offsetP.y;
-                if (SDL_HasIntersectionF(&entities[j].r, &wormRects[i])) {
-                    entities.erase(entities.begin() + j--);
-                }
-                else {
-                    entities[j].r.x += entities[j].offsetP.x;
-                    entities[j].r.y += entities[j].offsetP.y;
-                }
-            }
         }
         if (tradeClock.getElapsedTime() > 1000) // TODO: Set it to 20000
         {
@@ -1031,88 +851,12 @@ void mainLoop()
             SDL_RenderCopyF(renderer, tradeT, 0, &tradeRects[i]);
         }
 #endif
-        if (currentTreeIndex == 0) {
-            SDL_RenderCopyF(renderer, treeT, 0, &treeR);
-        }
-        else if (currentTreeIndex == 1) {
-            SDL_RenderCopyF(renderer, tree1T, 0, &treeR);
-        }
-        else if (currentTreeIndex == 2) {
-            SDL_RenderCopyF(renderer, tree2T, 0, &treeR);
-        }
-        else if (currentTreeIndex == 3) {
-            SDL_RenderCopyF(renderer, tree3T, 0, &treeR);
-        }
-        if (trees > 1) {
-            if (currentTreeIndex == 0) {
-                SDL_RenderCopyF(renderer, treeT, 0, &tree2R);
-            }
-            else if (currentTreeIndex == 1) {
-                SDL_RenderCopyF(renderer, tree1T, 0, &tree2R);
-            }
-            else if (currentTreeIndex == 2) {
-                SDL_RenderCopyF(renderer, tree2T, 0, &tree2R);
-            }
-            else if (currentTreeIndex == 3) {
-                SDL_RenderCopyF(renderer, tree3T, 0, &tree2R);
-            }
-        }
-        if (trees > 2) {
-            if (currentTreeIndex == 0) {
-                SDL_RenderCopyF(renderer, treeT, 0, &tree3R);
-            }
-            else if (currentTreeIndex == 1) {
-                SDL_RenderCopyF(renderer, tree1T, 0, &tree3R);
-            }
-            else if (currentTreeIndex == 2) {
-                SDL_RenderCopyF(renderer, tree2T, 0, &tree3R);
-            }
-            else if (currentTreeIndex == 3) {
-                SDL_RenderCopyF(renderer, tree3T, 0, &tree3R);
-            }
-        }
         SDL_RenderCopyF(renderer, vineT, 0, &grapeTreeR);
         SDL_RenderCopyF(renderer, appleTreeT, 0, &appleTreeR);
         SDL_RenderCopyF(renderer, bananaTreeT, 0, &bananaTreeR);
         SDL_RenderCopyF(renderer, soilT, 0, &carrotTreeR);
         SDL_RenderCopyF(renderer, soilT, 0, &potatoTreeR);
         SDL_RenderCopyF(renderer, pumpkinTreeT, 0, &pumpkinTreeR);
-        if (treeAnimationClock.getElapsedTime() > 1000) {
-            if (++currentTreeIndex >= 4) {
-                currentTreeIndex = 0;
-            }
-            treeAnimationClock.restart();
-        }
-        for (int i = 0; i < entities.size(); ++i) {
-            entities[i].r.x += entities[i].offsetP.x;
-            entities[i].r.y += entities[i].offsetP.y;
-            if (entities[i].entityType == EntityType::Leaf) {
-                SDL_RenderCopyF(renderer, leavesT, 0, &entities[i].r);
-            }
-            else if (entities[i].entityType == EntityType::Grape) {
-                SDL_RenderCopyF(renderer, grapeT, 0, &entities[i].r);
-            }
-            else if (entities[i].entityType == EntityType::Apple) {
-                SDL_RenderCopyF(renderer, appleT, 0, &entities[i].r);
-            }
-            else if (entities[i].entityType == EntityType::Banana) {
-                SDL_RenderCopyF(renderer, bananaT, 0, &entities[i].r);
-            }
-            else if (entities[i].entityType == EntityType::Carrot) {
-                SDL_RenderCopyF(renderer, carrotT, 0, &entities[i].r);
-            }
-            else if (entities[i].entityType == EntityType::Potato) {
-                SDL_RenderCopyF(renderer, potatoT, 0, &entities[i].r);
-            }
-            else if (entities[i].entityType == EntityType::Pumpkin) {
-                SDL_RenderCopyF(renderer, pumpkinT, 0, &entities[i].r);
-            }
-            entities[i].r.x -= entities[i].offsetP.x;
-            entities[i].r.y -= entities[i].offsetP.y;
-        }
-        for (int i = 0; i < wormRects.size(); ++i) {
-            SDL_RenderCopyF(renderer, wormT, 0, &wormRects[i]);
-        }
         scoreText.draw(renderer);
         SDL_RenderCopyF(renderer, shopT, 0, &shopR);
         if (isMuted) {
@@ -1173,23 +917,6 @@ void mainLoop()
                 if (SDL_PointInFRect(&mousePos, &shop.backArrowR)) {
                     state = State::Gameplay;
                 }
-                if (SDL_PointInFRect(&mousePos, &shop.moreTreesBuyR) && trees != 3) {
-                    if (std::stoi(scoreText.text) >= std::stoi(shop.moreTreesPriceText.text)) {
-                        scoreText.setText(renderer, robotoF, std::stoi(scoreText.text) - std::stoi(shop.moreTreesPriceText.text));
-                        ++trees;
-                        if (trees == 2) {
-                            shop.moreTreesPriceText.setText(renderer, robotoF, 200);
-                        }
-                    }
-                }
-                if (SDL_PointInFRect(&mousePos, &shop.moreLeafsBuyR) && leafSpawnDelayInMs > 100) {
-                    if (std::stoi(scoreText.text) >= std::stoi(shop.moreLeafsPriceText.text)) {
-                        scoreText.setText(renderer, robotoF, std::stoi(scoreText.text) - std::stoi(shop.moreLeafsPriceText.text));
-                        if (leafSpawnDelayInMs > 100) {
-                            leafSpawnDelayInMs -= 100;
-                        }
-                    }
-                }
                 if (SDL_PointInFRect(&mousePos, &shop.lessRotBuyR)) {
                     if (std::stoi(scoreText.text) >= std::stoi(shop.lessRotPriceText.text)) {
                         scoreText.setText(renderer, robotoF, std::stoi(scoreText.text) - std::stoi(shop.lessRotPriceText.text));
@@ -1217,18 +944,6 @@ void mainLoop()
         }
         SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
         SDL_RenderClear(renderer);
-        if (trees != 3) {
-            SDL_RenderCopyF(renderer, treeT, 0, &shop.treeR);
-            shop.moreTreesText.draw(renderer);
-            shop.moreTreesPriceText.draw(renderer);
-            SDL_RenderCopyF(renderer, buyT, 0, &shop.moreTreesBuyR);
-        }
-        if (leafSpawnDelayInMs > 100) {
-            SDL_RenderCopyF(renderer, leavesT, 0, &shop.leafR);
-            shop.moreLeafsText.draw(renderer);
-            shop.moreLeafsPriceText.draw(renderer);
-            SDL_RenderCopyF(renderer, buyT, 0, &shop.moreLeafsBuyR);
-        }
         SDL_RenderCopyF(renderer, leafWithSprayerT, 0, &shop.lessRotR);
         shop.lessRotText.draw(renderer);
         shop.lessRotPriceText.draw(renderer);
@@ -1295,26 +1010,20 @@ int main(int argc, char* argv[])
     josephKosmaM = Mix_LoadMUS("res/autumnLeavesJosephKosma.mp3");
     antonioVivaldiM = Mix_LoadMUS("res/jesienAntonioVivaldi.mp3");
     Mix_PlayMusic(josephKosmaM, 1);
-    treeR.w = 32;
-    treeR.h = 32;
-    treeR.x = windowWidth / 2 - treeR.w / 2;
-    treeR.y = windowHeight - treeR.h - 150;
-    tree2R = treeR;
-    tree2R.x = treeR.x - tree2R.w - 20;
-    tree3R = treeR;
-    tree3R.x = treeR.x + treeR.w + 20;
-    appleTreeR = treeR;
-    appleTreeR.y = tree3R.y + tree3R.h + 20;
+    appleTreeR.w = 32;
+    appleTreeR.h = 32;
+    appleTreeR.x = windowWidth / 2 - appleTreeR.w / 2;
+    appleTreeR.y = 190;
     bananaTreeR = appleTreeR;
-    bananaTreeR.x = appleTreeR.x - bananaTreeR.w - 20;
+    bananaTreeR.x = appleTreeR.x - bananaTreeR.w - 50;
     carrotTreeR = appleTreeR;
-    carrotTreeR.x = appleTreeR.x + appleTreeR.w + 20;
+    carrotTreeR.x = appleTreeR.x + appleTreeR.w + 50;
     grapeTreeR = appleTreeR;
-    grapeTreeR.y = appleTreeR.y + appleTreeR.h + 20;
+    grapeTreeR.y = appleTreeR.y + appleTreeR.h + 50;
     potatoTreeR = grapeTreeR;
-    potatoTreeR.x = grapeTreeR.x - potatoTreeR.w - 20;
+    potatoTreeR.x = grapeTreeR.x - potatoTreeR.w - 50;
     pumpkinTreeR = grapeTreeR;
-    pumpkinTreeR.x = grapeTreeR.x + grapeTreeR.w + 20;
+    pumpkinTreeR.x = grapeTreeR.x + grapeTreeR.w + 50;
     shopR.w = 48;
     shopR.h = 48;
     shopR.x = windowWidth - shopR.w * 2;
@@ -1330,46 +1039,10 @@ int main(int argc, char* argv[])
     shop.backArrowR.h = 32;
     shop.backArrowR.x = 5;
     shop.backArrowR.y = 5;
-    shop.treeR.w = 32;
-    shop.treeR.h = 32;
-    shop.treeR.x = shop.backArrowR.x + shop.backArrowR.w + 5;
-    shop.treeR.y = 15;
-    shop.moreTreesText.setText(renderer, robotoF, "More trees");
-    shop.moreTreesText.dstR.w = 70;
-    shop.moreTreesText.dstR.h = 35;
-    shop.moreTreesText.dstR.x = shop.treeR.x;
-    shop.moreTreesText.dstR.y = shop.treeR.y + shop.treeR.h;
-    shop.moreTreesPriceText.setText(renderer, robotoF, 100);
-    shop.moreTreesPriceText.dstR.w = 70;
-    shop.moreTreesPriceText.dstR.h = 35;
-    shop.moreTreesPriceText.dstR.x = shop.moreTreesText.dstR.x;
-    shop.moreTreesPriceText.dstR.y = shop.moreTreesText.dstR.y + shop.moreTreesText.dstR.h;
-    shop.moreTreesBuyR.w = 45;
-    shop.moreTreesBuyR.h = 32;
-    shop.moreTreesBuyR.x = shop.moreTreesPriceText.dstR.x;
-    shop.moreTreesBuyR.y = shop.moreTreesPriceText.dstR.y + shop.moreTreesPriceText.dstR.h;
-    shop.leafR.w = 32;
-    shop.leafR.h = 32;
-    shop.leafR.x = shop.moreTreesText.dstR.x + shop.moreTreesText.dstR.w + 15;
-    shop.leafR.y = 15;
-    shop.moreLeafsText.setText(renderer, robotoF, "More leafs");
-    shop.moreLeafsText.dstR.w = 70;
-    shop.moreLeafsText.dstR.h = 35;
-    shop.moreLeafsText.dstR.x = shop.leafR.x;
-    shop.moreLeafsText.dstR.y = shop.leafR.y + shop.leafR.h;
-    shop.moreLeafsPriceText.setText(renderer, robotoF, 100);
-    shop.moreLeafsPriceText.dstR.w = 70;
-    shop.moreLeafsPriceText.dstR.h = 35;
-    shop.moreLeafsPriceText.dstR.x = shop.moreLeafsText.dstR.x;
-    shop.moreLeafsPriceText.dstR.y = shop.moreLeafsText.dstR.y + shop.moreLeafsText.dstR.h;
-    shop.moreLeafsBuyR.w = 45;
-    shop.moreLeafsBuyR.h = 32;
-    shop.moreLeafsBuyR.x = shop.moreLeafsPriceText.dstR.x;
-    shop.moreLeafsBuyR.y = shop.moreLeafsPriceText.dstR.y + shop.moreLeafsPriceText.dstR.h;
     shop.lessRotR.w = 32;
     shop.lessRotR.h = 32;
-    shop.lessRotR.x = shop.treeR.x;
-    shop.lessRotR.y = shop.moreTreesBuyR.y + shop.moreTreesBuyR.h + 5;
+    shop.lessRotR.x = shop.backArrowR.x + shop.backArrowR.w + 5;
+    shop.lessRotR.y = shop.lessRotPriceText.dstR.y + shop.lessRotPriceText.dstR.h + 5;
     shop.lessRotText.setText(renderer, robotoF, "Less rot");
     shop.lessRotText.dstR.w = 65;
     shop.lessRotText.dstR.h = 35;
@@ -1386,8 +1059,8 @@ int main(int argc, char* argv[])
     shop.lessRotBuyR.y = shop.lessRotPriceText.dstR.y + shop.lessRotPriceText.dstR.h;
     shop.moreEnergyR.w = 32;
     shop.moreEnergyR.h = 32;
-    shop.moreEnergyR.x = shop.leafR.x;
-    shop.moreEnergyR.y = shop.moreLeafsBuyR.y + shop.moreLeafsBuyR.h + 5;
+    shop.moreEnergyR.x = shop.lessRotR.x + shop.lessRotR.w + 50;
+    shop.moreEnergyR.y = shop.moreEnergyPriceText.dstR.y + shop.moreEnergyPriceText.dstR.h + 5;
     shop.moreEnergyText.setText(renderer, robotoF, "More energy");
     shop.moreEnergyText.dstR.w = 85;
     shop.moreEnergyText.dstR.h = 35;
@@ -1426,8 +1099,8 @@ int main(int argc, char* argv[])
     energyR.y = energyText.dstR.y + energyText.dstR.h / 2 - energyR.h / 2;
     rotR.w = 64;
     rotR.h = 64;
-    rotR.x = treeR.x + treeR.w / 2 - rotR.w / 2;
-    rotR.y = treeR.y - rotR.h;
+    rotR.x = appleTreeR.x + appleTreeR.w / 2 - rotR.w / 2;
+    rotR.y = appleTreeR.y - rotR.h;
     houseflyR.w = 32;
     houseflyR.h = 32;
     houseflyR.x = rotR.x;
@@ -1439,14 +1112,12 @@ int main(int argc, char* argv[])
     readData();
     leafClock.restart();
     globalClock.restart();
-    treeAnimationClock.restart();
     rotClock.restart();
     grapeClock.restart();
     appleClock.restart();
     bananaClock.restart();
     intro.introClock.restart();
     timeClock.restart();
-    wormClock.restart();
     potatoClock.restart();
     pumpkinClock.restart();
 #ifdef __EMSCRIPTEN__

@@ -69,9 +69,12 @@ using namespace std::chrono_literals;
 #define SUNSET_HOUR_END 17
 #define MAX_ENERGY_INIT 10
 #define PLAYER_SPEED 0.1
+#define MAX_TREES 3
+#define SCREEN_PADDING 50
+#define EPSILON 0.001
 
-int windowWidth = 240;
-int windowHeight = 320;
+int windowWidth = 800;
+int windowHeight = 600;
 SDL_Point mousePos;
 SDL_Point realMousePos;
 bool keys[SDL_NUM_SCANCODES];
@@ -80,6 +83,42 @@ SDL_Window* window;
 SDL_Renderer* renderer;
 TTF_Font* robotoF;
 bool running = true;
+
+std::string prefPath;
+SDL_Texture* leavesT;
+SDL_Texture* treeT;
+SDL_Texture* tree1T;
+SDL_Texture* tree2T;
+SDL_Texture* tree3T;
+SDL_Texture* shopT;
+SDL_Texture* backArrowT;
+SDL_Texture* buyT;
+SDL_Texture* leafWithSprayerT;
+SDL_Texture* vineT;
+SDL_Texture* grapeT;
+SDL_Texture* appleT;
+SDL_Texture* appleTreeT;
+SDL_Texture* bananaT;
+SDL_Texture* bananaTreeT;
+SDL_Texture* carrotT;
+SDL_Texture* soilT;
+SDL_Texture* mutedT;
+SDL_Texture* soundT;
+SDL_Texture* leafT;
+SDL_Texture* sunT;
+SDL_Texture* moonT;
+SDL_Texture* energyT;
+SDL_Texture* rotT;
+SDL_Texture* moreEnergyT;
+SDL_Texture* houseflyT;
+SDL_Texture* wormT;
+SDL_Texture* potatoT;
+SDL_Texture* pumpkinT;
+SDL_Texture* pumpkinTreeT;
+SDL_Texture* tradeT;
+SDL_Texture* playerT;
+Mix_Music* josephKosmaM;
+Mix_Music* antonioVivaldiM;
 
 void logOutputCallback(void* userdata, int category, SDL_LogPriority priority, const char* message)
 {
@@ -484,13 +523,14 @@ enum class Direction {
 };
 
 enum class EntityType {
-    Leaf,
-    Grape,
+    Leaf = -1,
     Apple,
+    Grape,
     Banana,
     Carrot,
     Potato,
     Pumpkin,
+    NumEntities
 };
 
 struct Entity {
@@ -504,6 +544,42 @@ struct Player {
     SDL_FRect r{};
     int dx = 0;
     int dy = 0;
+};
+
+struct Plot {
+    SDL_FRect r{ 0, 0, 200, 130 };
+    EntityType plotType{};
+    int numProduce = 1;
+
+    SDL_Texture* getTexture() {
+        switch (plotType) {
+        case EntityType::Apple:
+            return appleTreeT;
+        case EntityType::Banana:
+            return bananaTreeT;
+        case EntityType::Carrot:
+            return soilT;
+        case EntityType::Grape:
+            return vineT;
+        case EntityType::Potato:
+            return soilT;
+        case EntityType::Pumpkin:
+            return pumpkinTreeT;
+        }
+    }
+
+    void renderPlot() {
+        SDL_SetRenderDrawColor(renderer, 20, 20, 30, 200);
+        SDL_RenderFillRectF(renderer, &r);
+        for (int i = 0; i < numProduce; ++i) {
+            SDL_FRect produceR{};
+            produceR.w = 64;
+            produceR.h = 64;
+            produceR.x = r.x + (r.w / (numProduce + 1) * (i + 1)) - produceR.w / 2.0f;
+            produceR.y = r.y + r.h / 2.0f - produceR.h / 2.0f;
+            SDL_RenderCopyF(renderer, getTexture(), 0, &produceR);
+        }
+    }
 };
 
 enum class State {
@@ -543,47 +619,13 @@ struct Intro {
     int leafAngle = 0;
 };
 
-std::string prefPath;
-SDL_Texture* leavesT;
-SDL_Texture* treeT;
-SDL_Texture* tree1T;
-SDL_Texture* tree2T;
-SDL_Texture* tree3T;
-SDL_Texture* shopT;
-SDL_Texture* backArrowT;
-SDL_Texture* buyT;
-SDL_Texture* leafWithSprayerT;
-SDL_Texture* vineT;
-SDL_Texture* grapeT;
-SDL_Texture* appleT;
-SDL_Texture* appleTreeT;
-SDL_Texture* bananaT;
-SDL_Texture* bananaTreeT;
-SDL_Texture* carrotT;
-SDL_Texture* soilT;
-SDL_Texture* mutedT;
-SDL_Texture* soundT;
-SDL_Texture* leafT;
-SDL_Texture* sunT;
-SDL_Texture* moonT;
-SDL_Texture* energyT;
-SDL_Texture* rotT;
-SDL_Texture* moreEnergyT;
-SDL_Texture* houseflyT;
-SDL_Texture* wormT;
-SDL_Texture* potatoT;
-SDL_Texture* pumpkinT;
-SDL_Texture* pumpkinTreeT;
-SDL_Texture* tradeT;
-SDL_Texture* playerT;
-Mix_Music* josephKosmaM;
-Mix_Music* antonioVivaldiM;
 SDL_FRect grapeTreeR;
 SDL_FRect appleTreeR;
 SDL_FRect bananaTreeR;
 SDL_FRect carrotTreeR;
 SDL_FRect potatoTreeR;
 SDL_FRect pumpkinTreeR;
+std::vector<Plot> plots;
 SDL_FRect soundBtnR;
 std::vector<Entity> entities;
 Clock leafClock;
@@ -665,6 +707,83 @@ void readData()
     }
     maxEnergy = rootNode.child("maxEnergy").text().as_int(MAX_ENERGY_INIT);
     energyText.setText(renderer, robotoF, maxEnergy);
+}
+
+void SetPosition() {
+    shopR.w = 96;
+    shopR.h = 96;
+    shopR.x = windowWidth / 2.0f - shopR.w / 2.0f;
+    shopR.y = windowHeight / 2.0f - shopR.h / 2.0f;
+
+    int numPlots = static_cast<int>(EntityType::NumEntities);
+    float angleIncrement = 2 * M_PI / numPlots;
+    float distanceH = windowHeight - 2.0f * SCREEN_PADDING;
+    float distanceW = windowWidth - 2.0f * SCREEN_PADDING;
+
+    for (int i = 0; i < numPlots; ++i) {
+        Plot plot{};
+        plot.plotType = static_cast<EntityType>(i);
+
+        float angle = angleIncrement * i;
+        angle += (M_PI / 2.0f);
+        if (angle < -M_PI) {
+            angle += 2 * M_PI;
+        }
+        if (angle > M_PI) {
+            angle -= 2 * M_PI;
+        }
+        float tanAngle = atan2f(distanceH, distanceW);
+
+        int region;
+        if ((angle > -tanAngle) && (angle <= tanAngle)) {
+            region = 1;
+        }
+        else if ((angle > tanAngle)
+            && (angle <= (M_PI - tanAngle)))
+        {
+            region = 2;
+        }
+        else if ((angle > (M_PI - tanAngle))
+            || (angle <= -(M_PI - tanAngle)))
+        {
+            region = 3;
+        }
+        else
+        {
+            region = 4;
+        }
+
+        float xMultiplier = 1;
+        float yMultiplier = 1;
+        switch (region) {
+        case 1: yMultiplier = -1; break;
+        case 2: yMultiplier = -1; break;
+        case 3: xMultiplier = -1; break;
+        case 4: xMultiplier = -1; break;
+        }
+
+        if ((abs(angle - M_PI * 0.5f) < EPSILON) || (abs(angle + M_PI * 0.5f) < EPSILON)) {
+            angle = 0.0f;
+        }
+        float theta = tanf(angle);
+        if (region == 1 || region == 3) {
+            plot.r.x = windowWidth / 2.0f + xMultiplier * distanceW / 2.0f;
+            plot.r.y = windowHeight / 2.0f + yMultiplier * distanceW / 2.0f * theta - plot.r.h / 2.0f;
+        }
+        else {
+            plot.r.x = windowWidth / 2.0f + xMultiplier * distanceH / 2.0f * theta - plot.r.w / 2.0f;
+            plot.r.y = windowHeight / 2.0f + yMultiplier * distanceH / 2.0f;
+        }
+        plot.r.x = std::clamp(plot.r.x, static_cast<float>(SCREEN_PADDING), windowWidth - SCREEN_PADDING - plot.r.w);
+        plot.r.y = std::clamp(plot.r.y, static_cast<float>(SCREEN_PADDING), windowHeight - SCREEN_PADDING - plot.r.h);
+        plots.push_back(plot);
+    }
+}
+
+void RenderScreen() {
+    for (auto& plot : plots) {
+        plot.renderPlot();
+    }
 }
 
 void mainLoop()
@@ -851,12 +970,7 @@ void mainLoop()
             SDL_RenderCopyF(renderer, tradeT, 0, &tradeRects[i]);
         }
 #endif
-        SDL_RenderCopyF(renderer, vineT, 0, &grapeTreeR);
-        SDL_RenderCopyF(renderer, appleTreeT, 0, &appleTreeR);
-        SDL_RenderCopyF(renderer, bananaTreeT, 0, &bananaTreeR);
-        SDL_RenderCopyF(renderer, soilT, 0, &carrotTreeR);
-        SDL_RenderCopyF(renderer, soilT, 0, &potatoTreeR);
-        SDL_RenderCopyF(renderer, pumpkinTreeT, 0, &pumpkinTreeR);
+        RenderScreen();
         scoreText.draw(renderer);
         SDL_RenderCopyF(renderer, shopT, 0, &shopR);
         if (isMuted) {
@@ -1010,26 +1124,11 @@ int main(int argc, char* argv[])
     josephKosmaM = Mix_LoadMUS("res/autumnLeavesJosephKosma.mp3");
     antonioVivaldiM = Mix_LoadMUS("res/jesienAntonioVivaldi.mp3");
     Mix_PlayMusic(josephKosmaM, 1);
-    appleTreeR.w = 32;
-    appleTreeR.h = 32;
-    appleTreeR.x = windowWidth / 2 - appleTreeR.w / 2;
-    appleTreeR.y = 190;
-    bananaTreeR = appleTreeR;
-    bananaTreeR.x = appleTreeR.x - bananaTreeR.w - 50;
-    carrotTreeR = appleTreeR;
-    carrotTreeR.x = appleTreeR.x + appleTreeR.w + 50;
-    grapeTreeR = appleTreeR;
-    grapeTreeR.y = appleTreeR.y + appleTreeR.h + 50;
-    potatoTreeR = grapeTreeR;
-    potatoTreeR.x = grapeTreeR.x - potatoTreeR.w - 50;
-    pumpkinTreeR = grapeTreeR;
-    pumpkinTreeR.x = grapeTreeR.x + grapeTreeR.w + 50;
-    shopR.w = 48;
-    shopR.h = 48;
-    shopR.x = windowWidth - shopR.w * 2;
-    shopR.y = 5;
-    soundBtnR = shopR;
-    soundBtnR.x = shopR.x + shopR.w;
+    SetPosition();
+    soundBtnR.w = 48;
+    soundBtnR.h = 48;
+    soundBtnR.x = windowWidth - soundBtnR.w - 20;
+    soundBtnR.y = 20;
     scoreText.setText(renderer, robotoF, 0);
     scoreText.dstR.w = 50;
     scoreText.dstR.h = 30;
@@ -1082,7 +1181,7 @@ int main(int argc, char* argv[])
     hourText.setText(renderer, robotoF, "7 am");
     hourText.dstR.w = 100;
     hourText.dstR.h = 35;
-    hourText.dstR.x = windowWidth - hourText.dstR.w;
+    hourText.dstR.x = windowWidth - hourText.dstR.w - 20;
     hourText.dstR.y = soundBtnR.y + soundBtnR.h;
     sunR.w = 32;
     sunR.h = 32;

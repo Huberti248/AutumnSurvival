@@ -525,14 +525,24 @@ enum class Direction {
 };
 
 enum class EntityType {
-    Leaf = -1,
+    Leaf,
     Apple,
     Grape,
     Banana,
     Carrot,
     Potato,
+    Pumpkin
+};
+
+enum class Food {
+    Empty = -1,
+    Apple,
+    Carrot,
+    Grape,
+    Potato,
     Pumpkin,
-    NumEntities
+    Banana,
+    NumFood
 };
 
 struct Entity {
@@ -548,26 +558,63 @@ struct Player {
     int dy = 0;
 };
 
+SDL_Texture* getFoodTexture(Food type) {
+    switch (type) {
+    case Food::Apple:
+        return appleT;
+    case Food::Banana:
+        return bananaT;
+    case Food::Carrot:
+        return carrotT;
+    case Food::Grape:
+        return grapeT;
+    case Food::Potato:
+        return potatoT;
+    case Food::Pumpkin:
+        return pumpkinT;
+    default:
+        return NULL;
+    }
+}
+
 struct Plot {
-    SDL_FRect r{ 0, 0, 200, 130 };
-    EntityType plotType{};
+    SDL_FRect r;
+    Food food{};
     int numProduce = 1;
     std::vector<SDL_FRect> producesR;
 
-    SDL_Texture* getTexture() {
-        switch (plotType) {
-        case EntityType::Apple:
+    Plot()
+    {
+        r.w = 200;
+        r.h = 130;
+        for (int i = 0; i < MAX_TREES; ++i) {
+            SDL_FRect a{};
+            a.w = 64;
+            a.h = 64;
+            producesR.push_back(a);
+        }
+    }
+
+    void setFood(Food type) {
+        food = type;
+    }
+
+    SDL_Texture* getPlotTexture() {
+        switch (food) {
+        case Food::Apple:
             return appleTreeT;
-        case EntityType::Banana:
+        case Food::Banana:
             return bananaTreeT;
-        case EntityType::Carrot:
+        case Food::Carrot:
             return soilT;
-        case EntityType::Grape:
+        case Food::Grape:
             return vineT;
-        case EntityType::Potato:
+        case Food::Potato:
             return soilT;
-        case EntityType::Pumpkin:
+        case Food::Pumpkin:
             return pumpkinTreeT;
+        default:
+            return appleTreeT;
         }
     }
 
@@ -575,17 +622,11 @@ struct Plot {
         SDL_SetRenderDrawColor(renderer, 20, 20, 30, 200);
         SDL_RenderFillRectF(renderer, &r);
         for (int i = 0; i < numProduce; ++i) {
-            if (i >= producesR.size()) {
-                SDL_FRect produceR{};
-                produceR.w = 64;
-                produceR.h = 64;
 
-                producesR.push_back(produceR);
-            }
             producesR[i].x = r.x + (r.w / (numProduce + 1) * (i + 1)) - producesR[i].w / 2.0f;
             producesR[i].y = r.y + r.h / 2.0f - producesR[i].h / 2.0f;
             
-            SDL_RenderCopyF(renderer, getTexture(), 0, &producesR[i]);
+            SDL_RenderCopyF(renderer, getPlotTexture(), 0, &producesR[i]);
         }
     }
 
@@ -636,16 +677,6 @@ struct Intro {
     SDL_FRect leafR{};
     Motion leafMotion = Motion::Right;
     int leafAngle = 0;
-};
-
-enum class Food {
-    Empty,
-    Apple,
-    Carrot,
-    Grape,
-    Potato,
-    Pumpkin,
-    Banana,
 };
 
 SDL_FRect grapeTreeR;
@@ -760,14 +791,14 @@ void SetPosition() {
     houseR.x = windowWidth / 2 - houseR.w / 2;
     houseR.y = windowHeight / 2 - houseR.h / 2;
 
-    int numPlots = static_cast<int>(EntityType::NumEntities);
+    int numPlots = static_cast<int>(Food::NumFood);
     float angleIncrement = 2 * M_PI / numPlots;
     float distanceH = windowHeight - 2.0f * SCREEN_PADDING;
     float distanceW = windowWidth - 2.0f * SCREEN_PADDING;
 
     for (int i = 0; i < numPlots; ++i) {
         Plot plot{};
-        plot.plotType = static_cast<EntityType>(i);
+        plot.setFood(static_cast<Food>(i));
 
         float angle = angleIncrement * i;
         angle += (M_PI / 2.0f);
@@ -919,44 +950,12 @@ void mainLoop()
             if (event.type == SDL_KEYDOWN) {
                 keys[event.key.keysym.scancode] = true;
                 if (event.key.keysym.scancode == SDL_SCANCODE_SPACE) {
-                    if (foods[0] == Food::Empty) {
-                        if (SDL_HasIntersectionF(&player.r, &appleTreeR)) {
-                            foods[0] = Food::Apple;
-                        }
-                        else if (SDL_HasIntersectionF(&player.r, &bananaTreeR)) {
-                            foods[0] = Food::Banana;
-                        }
-                        else if (SDL_HasIntersectionF(&player.r, &carrotTreeR)) {
-                            foods[0] = Food::Carrot;
-                        }
-                        else if (SDL_HasIntersectionF(&player.r, &grapeTreeR)) {
-                            foods[0] = Food::Grape;
-                        }
-                        else if (SDL_HasIntersectionF(&player.r, &potatoTreeR)) {
-                            foods[0] = Food::Potato;
-                        }
-                        else if (SDL_HasIntersectionF(&player.r, &pumpkinTreeR)) {
-                            foods[0] = Food::Pumpkin;
-                        }
-                    }
-                    else if (foods[1] == Food::Empty) {
-                        if (SDL_HasIntersectionF(&player.r, &appleTreeR)) {
-                            foods[1] = Food::Apple;
-                        }
-                        else if (SDL_HasIntersectionF(&player.r, &bananaTreeR)) {
-                            foods[1] = Food::Banana;
-                        }
-                        else if (SDL_HasIntersectionF(&player.r, &carrotTreeR)) {
-                            foods[1] = Food::Carrot;
-                        }
-                        else if (SDL_HasIntersectionF(&player.r, &grapeTreeR)) {
-                            foods[1] = Food::Grape;
-                        }
-                        else if (SDL_HasIntersectionF(&player.r, &potatoTreeR)) {
-                            foods[1] = Food::Potato;
-                        }
-                        else if (SDL_HasIntersectionF(&player.r, &pumpkinTreeR)) {
-                            foods[1] = Food::Pumpkin;
+                    if (foods[0] == Food::Empty || foods[1] == Food::Empty) {
+                        int index = foods[0] == Food::Empty ? 0 : 1;
+                        for (auto& plot : plots) {
+                            if (plot.isIntersecting(player.r)) {
+                                foods[index] = plot.food;
+                            }
                         }
                     }
                 }
@@ -1166,42 +1165,14 @@ void mainLoop()
         SDL_SetRenderDrawColor(renderer, 140, 56, 4, 0);
         SDL_RenderFillRectF(renderer, &inventorySlotR);
         SDL_RenderFillRectF(renderer, &inventorySlot2R);
-        if (foods[0] == Food::Apple) {
-            SDL_RenderCopyF(renderer, appleT, 0, &inventorySlotR);
+
+        if (foods[0] != Food::Empty) {
+            SDL_RenderCopyF(renderer, getFoodTexture(foods[0]), 0, &inventorySlotR);
         }
-        else if (foods[0] == Food::Potato) {
-            SDL_RenderCopyF(renderer, potatoT, 0, &inventorySlotR);
+        if (foods[1] != Food::Empty) {
+            SDL_RenderCopyF(renderer, getFoodTexture(foods[1]), 0, &inventorySlot2R);
         }
-        else if (foods[0] == Food::Banana) {
-            SDL_RenderCopyF(renderer, bananaT, 0, &inventorySlotR);
-        }
-        else if (foods[0] == Food::Carrot) {
-            SDL_RenderCopyF(renderer, carrotT, 0, &inventorySlotR);
-        }
-        else if (foods[0] == Food::Grape) {
-            SDL_RenderCopyF(renderer, grapeT, 0, &inventorySlotR);
-        }
-        else if (foods[0] == Food::Pumpkin) {
-            SDL_RenderCopyF(renderer, pumpkinT, 0, &inventorySlotR);
-        }
-        if (foods[1] == Food::Apple) {
-            SDL_RenderCopyF(renderer, appleT, 0, &inventorySlot2R);
-        }
-        else if (foods[1] == Food::Potato) {
-            SDL_RenderCopyF(renderer, potatoT, 0, &inventorySlot2R);
-        }
-        else if (foods[1] == Food::Banana) {
-            SDL_RenderCopyF(renderer, bananaT, 0, &inventorySlot2R);
-        }
-        else if (foods[1] == Food::Carrot) {
-            SDL_RenderCopyF(renderer, carrotT, 0, &inventorySlot2R);
-        }
-        else if (foods[1] == Food::Grape) {
-            SDL_RenderCopyF(renderer, grapeT, 0, &inventorySlot2R);
-        }
-        else if (foods[1] == Food::Pumpkin) {
-            SDL_RenderCopyF(renderer, pumpkinT, 0, &inventorySlot2R);
-        }
+
         SDL_RenderPresent(renderer);
     }
     else if (state == State::Shop) {
@@ -1462,6 +1433,9 @@ int main(int argc, char* argv[])
     timeClock.restart();
     potatoClock.restart();
     pumpkinClock.restart();
+    for (auto& food : foods) {
+        food = Food::Empty;
+    }
 #ifdef __EMSCRIPTEN__
     emscripten_set_main_loop(mainLoop, 0, 1);
 #else

@@ -426,7 +426,7 @@ SDL_bool SDL_IntersectFRect(const SDL_FRect* A, const SDL_FRect* B, SDL_FRect* r
 
 SDL_bool SDL_HasIntersectionF(const SDL_FRect* A, const SDL_FRect* B)
 {
-    int Amin, Amax, Bmin, Bmax;
+    float Amin, Amax, Bmin, Bmax;
 
     if (!A) {
         SDL_InvalidParamError("A");
@@ -510,6 +510,7 @@ enum class State {
     Gameplay,
     Shop,
     Intro,
+    Home,
 };
 
 struct Shop {
@@ -541,6 +542,16 @@ struct Intro {
     SDL_FRect leafR{};
     Motion leafMotion = Motion::Right;
     int leafAngle = 0;
+};
+
+enum class Food {
+    Empty,
+    Apple,
+    Carrot,
+    Grape,
+    Potato,
+    Pumpkin,
+    Banana,
 };
 
 std::string prefPath;
@@ -576,6 +587,8 @@ SDL_Texture* pumpkinT;
 SDL_Texture* pumpkinTreeT;
 SDL_Texture* tradeT;
 SDL_Texture* playerT;
+SDL_Texture* houseT;
+SDL_Texture* collectT;
 Mix_Music* josephKosmaM;
 Mix_Music* antonioVivaldiM;
 SDL_FRect grapeTreeR;
@@ -623,6 +636,15 @@ SDL_FRect houseflyR;
 bool houseflyGoingRight = true;
 std::vector<SDL_FRect> tradeRects;
 Player player;
+SDL_FRect houseR;
+bool isMoving = false;
+Clock energyClock;
+bool shouldGoHome = false;
+SDL_FRect collectR;
+bool isCollecting = false;
+SDL_FRect inventorySlotR;
+SDL_FRect inventorySlot2R;
+Food foods[2];
 
 void muteMusicAndSounds()
 {
@@ -665,6 +687,11 @@ void readData()
     }
     maxEnergy = rootNode.child("maxEnergy").text().as_int(MAX_ENERGY_INIT);
     energyText.setText(renderer, robotoF, maxEnergy);
+}
+
+float clamp(float n, float lower, float upper)
+{
+    return std::max(lower, std::min(n, upper));
 }
 
 void mainLoop()
@@ -749,6 +776,48 @@ void mainLoop()
             }
             if (event.type == SDL_KEYDOWN) {
                 keys[event.key.keysym.scancode] = true;
+                if (event.key.keysym.scancode == SDL_SCANCODE_SPACE) {
+                    if (foods[0] == Food::Empty) {
+                        if (SDL_HasIntersectionF(&player.r, &appleTreeR)) {
+                            foods[0] = Food::Apple;
+                        }
+                        else if (SDL_HasIntersectionF(&player.r, &bananaTreeR)) {
+                            foods[0] = Food::Banana;
+                        }
+                        else if (SDL_HasIntersectionF(&player.r, &carrotTreeR)) {
+                            foods[0] = Food::Carrot;
+                        }
+                        else if (SDL_HasIntersectionF(&player.r, &grapeTreeR)) {
+                            foods[0] = Food::Grape;
+                        }
+                        else if (SDL_HasIntersectionF(&player.r, &potatoTreeR)) {
+                            foods[0] = Food::Potato;
+                        }
+                        else if (SDL_HasIntersectionF(&player.r, &pumpkinTreeR)) {
+                            foods[0] = Food::Pumpkin;
+                        }
+                    }
+                    else if (foods[1] == Food::Empty) {
+                        if (SDL_HasIntersectionF(&player.r, &appleTreeR)) {
+                            foods[1] = Food::Apple;
+                        }
+                        else if (SDL_HasIntersectionF(&player.r, &bananaTreeR)) {
+                            foods[1] = Food::Banana;
+                        }
+                        else if (SDL_HasIntersectionF(&player.r, &carrotTreeR)) {
+                            foods[1] = Food::Carrot;
+                        }
+                        else if (SDL_HasIntersectionF(&player.r, &grapeTreeR)) {
+                            foods[1] = Food::Grape;
+                        }
+                        else if (SDL_HasIntersectionF(&player.r, &potatoTreeR)) {
+                            foods[1] = Food::Potato;
+                        }
+                        else if (SDL_HasIntersectionF(&player.r, &pumpkinTreeR)) {
+                            foods[1] = Food::Pumpkin;
+                        }
+                    }
+                }
             }
             if (event.type == SDL_KEYUP) {
                 keys[event.key.keysym.scancode] = false;
@@ -830,20 +899,83 @@ void mainLoop()
         }
         player.dx = 0;
         player.dy = 0;
-        if (keys[SDL_SCANCODE_A]) {
-            player.dx = -1;
+        if (shouldGoHome) {
+            if (player.r.x + player.r.w < houseR.x) {
+                player.r.x += PLAYER_SPEED * deltaTime;
+            }
+            else if (player.r.x > houseR.x + houseR.w) {
+                player.r.x += -PLAYER_SPEED * deltaTime;
+            }
+            if (player.r.y + player.r.h < houseR.y) {
+                player.r.y += PLAYER_SPEED * deltaTime;
+            }
+            else if (player.r.y > houseR.y + houseR.h) {
+                player.r.y += -PLAYER_SPEED * deltaTime;
+            }
         }
-        else if (keys[SDL_SCANCODE_D]) {
-            player.dx = 1;
+        else {
+            if (keys[SDL_SCANCODE_A]) {
+                player.dx = -1;
+                if (!isMoving) {
+                    energyClock.restart();
+                }
+                isMoving = true;
+            }
+            else if (keys[SDL_SCANCODE_D]) {
+                player.dx = 1;
+                if (!isMoving) {
+                    energyClock.restart();
+                }
+                isMoving = true;
+            }
+            if (keys[SDL_SCANCODE_W]) {
+                player.dy = -1;
+                if (!isMoving) {
+                    energyClock.restart();
+                }
+                isMoving = true;
+            }
+            else if (keys[SDL_SCANCODE_S]) {
+                player.dy = 1;
+                if (!isMoving) {
+                    energyClock.restart();
+                }
+                isMoving = true;
+            }
         }
-        if (keys[SDL_SCANCODE_W]) {
-            player.dy = -1;
+        player.r.x = clamp(player.r.x, 0, windowWidth - player.r.w);
+        player.r.y = clamp(player.r.y, 0, windowHeight- player.r.h);
+        if (!keys[SDL_SCANCODE_A] && !keys[SDL_SCANCODE_D]
+            && !keys[SDL_SCANCODE_W] && !keys[SDL_SCANCODE_S]) {
+            isMoving = false;
         }
-        else if (keys[SDL_SCANCODE_S]) {
-            player.dy = 1;
+        if (isMoving) {
+            if (energyClock.getElapsedTime() > 1000) {
+                if (std::stoi(energyText.text) != 0) {
+                    energyText.setText(renderer, robotoF, std::stoi(energyText.text) - 1);
+                }
+                if (energyText.text == "0") {
+                    shouldGoHome = true;
+                }
+                energyClock.restart();
+            }
         }
         player.r.x += player.dx * deltaTime * PLAYER_SPEED;
         player.r.y += player.dy * deltaTime * PLAYER_SPEED;
+        if (SDL_HasIntersectionF(&houseR, &player.r)) {
+            state = State::Home;
+        }
+        if (SDL_HasIntersectionF(&appleTreeR, &player.r)
+            || SDL_HasIntersectionF(&bananaTreeR, &player.r)
+            || SDL_HasIntersectionF(&carrotTreeR, &player.r)
+            || SDL_HasIntersectionF(&potatoTreeR, &player.r)
+            || SDL_HasIntersectionF(&grapeTreeR, &player.r)
+            || SDL_HasIntersectionF(&pumpkinTreeR, &player.r)) {
+            isCollecting = true;
+        }
+        else {
+            isCollecting = false;
+        }
         SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
         SDL_RenderClear(renderer);
 #if 0 // TODO: Turn it on when done?
@@ -893,7 +1025,50 @@ void mainLoop()
             houseflyGoingRight = true;
             houseflyR.y = rotR.y + rotR.h - houseflyR.h;
         }
+        SDL_RenderCopyF(renderer, houseT, 0, &houseR);
         SDL_RenderCopyF(renderer, playerT, 0, &player.r);
+        if (isCollecting) {
+            SDL_RenderCopyF(renderer, collectT, 0, &collectR);
+        }
+        SDL_SetRenderDrawColor(renderer, 140, 56, 4, 0);
+        SDL_RenderFillRectF(renderer, &inventorySlotR);
+        SDL_RenderFillRectF(renderer, &inventorySlot2R);
+        if (foods[0] == Food::Apple) {
+            SDL_RenderCopyF(renderer, appleT, 0, &inventorySlotR);
+        }
+        else if (foods[0] == Food::Potato) {
+            SDL_RenderCopyF(renderer, potatoT, 0, &inventorySlotR);
+        }
+        else if (foods[0] == Food::Banana) {
+            SDL_RenderCopyF(renderer, bananaT, 0, &inventorySlotR);
+        }
+        else if (foods[0] == Food::Carrot) {
+            SDL_RenderCopyF(renderer, carrotT, 0, &inventorySlotR);
+        }
+        else if (foods[0] == Food::Grape) {
+            SDL_RenderCopyF(renderer, grapeT, 0, &inventorySlotR);
+        }
+        else if (foods[0] == Food::Pumpkin) {
+            SDL_RenderCopyF(renderer, pumpkinT, 0, &inventorySlotR);
+        }
+        if (foods[1] == Food::Apple) {
+            SDL_RenderCopyF(renderer, appleT, 0, &inventorySlot2R);
+        }
+        else if (foods[1] == Food::Potato) {
+            SDL_RenderCopyF(renderer, potatoT, 0, &inventorySlot2R);
+        }
+        else if (foods[1] == Food::Banana) {
+            SDL_RenderCopyF(renderer, bananaT, 0, &inventorySlot2R);
+        }
+        else if (foods[1] == Food::Carrot) {
+            SDL_RenderCopyF(renderer, carrotT, 0, &inventorySlot2R);
+        }
+        else if (foods[1] == Food::Grape) {
+            SDL_RenderCopyF(renderer, grapeT, 0, &inventorySlot2R);
+        }
+        else if (foods[1] == Food::Pumpkin) {
+            SDL_RenderCopyF(renderer, pumpkinT, 0, &inventorySlot2R);
+        }
         SDL_RenderPresent(renderer);
     }
     else if (state == State::Shop) {
@@ -955,6 +1130,41 @@ void mainLoop()
         SDL_RenderCopyF(renderer, backArrowT, 0, &shop.backArrowR);
         SDL_RenderPresent(renderer);
     }
+    else if (state == State::Home) {
+        SDL_Event event;
+        while (SDL_PollEvent(&event)) {
+            if (event.type == SDL_QUIT || event.type == SDL_KEYDOWN && event.key.keysym.scancode == SDL_SCANCODE_ESCAPE) {
+                running = false;
+                // TODO: On mobile remember to use eventWatch function (it doesn't reach this code when terminating)
+            }
+            if (event.type == SDL_WINDOWEVENT && event.window.event == SDL_WINDOWEVENT_RESIZED) {
+                SDL_RenderSetScale(renderer, event.window.data1 / (float)windowWidth, event.window.data2 / (float)windowHeight);
+            }
+            if (event.type == SDL_KEYDOWN) {
+                keys[event.key.keysym.scancode] = true;
+            }
+            if (event.type == SDL_KEYUP) {
+                keys[event.key.keysym.scancode] = false;
+            }
+            if (event.type == SDL_MOUSEBUTTONDOWN) {
+                buttons[event.button.button] = true;
+            }
+            if (event.type == SDL_MOUSEBUTTONUP) {
+                buttons[event.button.button] = false;
+            }
+            if (event.type == SDL_MOUSEMOTION) {
+                float scaleX, scaleY;
+                SDL_RenderGetScale(renderer, &scaleX, &scaleY);
+                mousePos.x = event.motion.x / scaleX;
+                mousePos.y = event.motion.y / scaleY;
+                realMousePos.x = event.motion.x;
+                realMousePos.y = event.motion.y;
+            }
+        }
+        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
+        SDL_RenderClear(renderer);
+        SDL_RenderPresent(renderer);
+    }
     saveData();
 }
 
@@ -1007,6 +1217,8 @@ int main(int argc, char* argv[])
     pumpkinTreeT = IMG_LoadTexture(renderer, "res/pumpkinTree.png");
     tradeT = IMG_LoadTexture(renderer, "res/trade.png");
     playerT = IMG_LoadTexture(renderer, "res/player.png");
+    houseT = IMG_LoadTexture(renderer, "res/house.png");
+    collectT = IMG_LoadTexture(renderer, "res/collect.png");
     josephKosmaM = Mix_LoadMUS("res/autumnLeavesJosephKosma.mp3");
     antonioVivaldiM = Mix_LoadMUS("res/jesienAntonioVivaldi.mp3");
     Mix_PlayMusic(josephKosmaM, 1);
@@ -1105,10 +1317,26 @@ int main(int argc, char* argv[])
     houseflyR.h = 32;
     houseflyR.x = rotR.x;
     houseflyR.y = rotR.y + rotR.h - houseflyR.h;
+    houseR.w = 32;
+    houseR.h = 32;
+    houseR.x = windowWidth / 2 - houseR.w / 2;
+    houseR.y = windowHeight / 2 - houseR.h / 2;
     player.r.w = 32;
     player.r.h = 32;
-    player.r.x = windowWidth / 2 - player.r.w / 2;
-    player.r.y = windowHeight / 2 - player.r.h / 2;
+    player.r.x = houseR.x + houseR.w + 5;
+    player.r.y = houseR.y;
+    collectR.w = 72;
+    collectR.h = 52;
+    collectR.x = windowWidth / 2 - collectR.w / 2;
+    collectR.y = windowHeight - collectR.h;
+    inventorySlotR.w = 32;
+    inventorySlotR.h = 32;
+    inventorySlotR.x = windowWidth - inventorySlotR.w * 2 - 5;
+    inventorySlotR.y = windowHeight - inventorySlotR.h;
+    inventorySlot2R.w = 32;
+    inventorySlot2R.h = 32;
+    inventorySlot2R.x = windowWidth - inventorySlot2R.w;
+    inventorySlot2R.y = windowHeight - inventorySlot2R.h;
     readData();
     leafClock.restart();
     globalClock.restart();

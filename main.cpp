@@ -134,6 +134,7 @@ SDL_Texture* houseT;
 SDL_Texture* collectT;
 SDL_Texture* drawT;
 SDL_Texture* openT;
+SDL_Texture* xT;
 Mix_Music* josephKosmaM;
 Mix_Music* antonioVivaldiM;
 
@@ -824,6 +825,8 @@ SDL_FRect collectR;
 bool isCollecting = false;
 SDL_FRect inventorySlotR;
 SDL_FRect inventorySlot2R;
+SDL_FRect inventorySlotXR;
+SDL_FRect inventorySlotX2R;
 std::array<Food, 2> foods;
 Button backHomeButton;
 Button shopButton;
@@ -1003,6 +1006,12 @@ void drawInventory()
     else if (foods[1] == Food::Pumpkin) {
         SDL_RenderCopyF(renderer, pumpkinT, 0, &inventorySlot2R);
     }
+    if (foods[0] != Food::Empty) {
+        SDL_RenderCopyF(renderer, xT, 0, &inventorySlotXR);
+    }
+    if (foods[1] != Food::Empty) {
+        SDL_RenderCopyF(renderer, xT, 0, &inventorySlotX2R);
+    }
 }
 
 void RenderUI()
@@ -1164,6 +1173,12 @@ void mainLoop()
                     else {
                         unmuteMusicAndSounds();
                     }
+                }
+                if (SDL_PointInFRect(&mousePos, &inventorySlotXR)) {
+                    foods[0] = Food::Empty;
+                }
+                if (SDL_PointInFRect(&mousePos, &inventorySlotX2R)) {
+                    foods[1] = Food::Empty;
                 }
             }
             if (event.type == SDL_MOUSEBUTTONUP) {
@@ -1562,6 +1577,7 @@ int main(int argc, char* argv[])
     houseT = IMG_LoadTexture(renderer, "res/house.png");
     collectT = IMG_LoadTexture(renderer, "res/collect.png");
     openT = IMG_LoadTexture(renderer, "res/open.png");
+    xT = IMG_LoadTexture(renderer, "res/x.png");
     josephKosmaM = Mix_LoadMUS("res/autumnLeavesJosephKosma.mp3");
     antonioVivaldiM = Mix_LoadMUS("res/jesienAntonioVivaldi.mp3");
     Mix_PlayMusic(josephKosmaM, 1);
@@ -1661,6 +1677,12 @@ int main(int argc, char* argv[])
     inventorySlot2R.h = 64;
     inventorySlot2R.x = windowWidth - inventorySlot2R.w;
     inventorySlot2R.y = windowHeight - inventorySlot2R.h;
+    inventorySlotXR.w = 16;
+    inventorySlotXR.h = 16;
+    inventorySlotXR.x = inventorySlotR.x - inventorySlotXR.w / 2;
+    inventorySlotXR.y = inventorySlotR.y - inventorySlotXR.h;
+    inventorySlotX2R = inventorySlotXR;
+    inventorySlotX2R.x = inventorySlot2R.x - inventorySlotX2R.w / 2;
     doorR.w = 32;
     doorR.h = 32;
     doorR.x = windowWidth - doorR.w - 20;

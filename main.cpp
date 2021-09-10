@@ -73,6 +73,10 @@ using namespace std::chrono_literals;
 #define SCREEN_PADDING 50
 #define EPSILON 0.001
 
+#define HOME_BUTTON_SELECTED  { 242, 182, 61, 255 } 
+#define HOME_BUTTON_UNSELECTED { 209, 180, 140, 255 } 
+#define LETTER_WIDTH 25
+
 int windowWidth = 800;
 int windowHeight = 600;
 SDL_Point mousePos;
@@ -558,7 +562,7 @@ struct Player {
     int dy = 0;
 };
 
-SDL_Texture* getFoodTexture(Food type) {
+SDL_Texture* GetFoodTexture(Food type) {
     switch (type) {
     case Food::Apple:
         return appleT;
@@ -638,6 +642,71 @@ struct Plot {
         }
 
         return false;
+    }
+};
+
+struct Button {
+    SDL_FRect container;
+    Text text;
+    SDL_Color selected;
+    SDL_Color unselected;
+    SDL_Texture* image;
+    bool isSelected = false;
+    bool hasImage = false;
+
+    void init(SDL_Renderer* renderer, const SDL_FRect size, const std::string text) {
+        container = size;
+        container.w = static_cast<float>(LETTER_WIDTH * text.length() + 30);
+        container.x = size.x + size.w / 2.0f - container.w / 2.0f;
+        this->text.dstR.w = LETTER_WIDTH * text.length();
+        this->text.dstR.h = 50;
+        this->text.dstR.x = container.x + container.w / 2.0f - this->text.dstR.w / 2.0f;
+        this->text.dstR.y = container.y + container.h / 2.0f - this->text.dstR.h / 2.0f;
+        this->text.setText(renderer, robotoF, text);
+    }
+
+    void setColors(SDL_Color selected, SDL_Color unselected) {
+        this->selected = selected;
+        this->unselected = unselected;
+    }
+
+    void draw(SDL_Renderer* renderer) {
+        if (isSelected) {
+            SDL_SetRenderDrawColor(renderer, selected.r, selected.g, selected.b, selected.a);
+        }
+        else {
+            SDL_SetRenderDrawColor(renderer, unselected.r, unselected.g, unselected.b, unselected.a);
+        }
+
+        SDL_RenderFillRectF(renderer, &container);
+        text.draw(renderer);
+    }
+
+    void draw(SDL_Renderer* renderer, SDL_Texture* texture, SDL_FRect textureR, float offset = 20) {
+        SDL_FRect newContainer;
+        newContainer.h = textureR.h + text.dstR.h + (2 * offset);
+        newContainer.w = std::max(container.w, textureR.w + (2 * offset));
+        newContainer.x = textureR.x - offset / 2.0f;
+        newContainer.y = textureR.y - offset / 2.0f;
+        container = newContainer;
+        this->text.dstR.x = container.x + container.w / 2.0f - this->text.dstR.w / 2.0f;
+        this->text.dstR.y = container.y + container.h - offset - this->text.dstR.h;
+
+        textureR.x = container.x + container.w / 2.0f - textureR.w / 2.0f;
+
+        draw(renderer);
+        SDL_RenderCopyF(renderer, texture, 0, &textureR);
+    }
+
+    void updateButton() {
+        if (SDL_PointInFRect(&mousePos, &container)) {
+            if (!isSelected) {
+                isSelected = true;
+            }
+        }
+        else if (isSelected) {
+            isSelected = false;
+        }
     }
 };
 
@@ -734,6 +803,9 @@ bool isCollecting = false;
 SDL_FRect inventorySlotR;
 SDL_FRect inventorySlot2R;
 Food foods[2];
+Button backHomeButton;
+Button shopButton;
+bool exitedHome = false;
 
 void muteMusicAndSounds()
 {
@@ -778,14 +850,12 @@ void readData()
     energyText.setText(renderer, robotoF, maxEnergy);
 }
 
-void SetPosition() {
-    /*
-    shopR.w = 96;
-    shopR.h = 96;
-    shopR.x = windowWidth / 2.0f - shopR.w / 2.0f;
-    shopR.y = windowHeight / 2.0f - shopR.h / 2.0f;
-    */
+float clamp(float n, float lower, float upper)
+{
+    return std::max(lower, std::min(n, upper));
+}
 
+void SetPosition() {
     houseR.w = 64;
     houseR.h = 64;
     houseR.x = windowWidth / 2 - houseR.w / 2;
@@ -850,8 +920,8 @@ void SetPosition() {
             plot.r.x = windowWidth / 2.0f + xMultiplier * distanceH / 2.0f * theta - plot.r.w / 2.0f;
             plot.r.y = windowHeight / 2.0f + yMultiplier * distanceH / 2.0f;
         }
-        plot.r.x = std::clamp(plot.r.x, static_cast<float>(SCREEN_PADDING), windowWidth - SCREEN_PADDING - plot.r.w);
-        plot.r.y = std::clamp(plot.r.y, static_cast<float>(SCREEN_PADDING), windowHeight - SCREEN_PADDING - plot.r.h);
+        plot.r.x = clamp(plot.r.x, static_cast<float>(SCREEN_PADDING), windowWidth - SCREEN_PADDING - plot.r.w);
+        plot.r.y = clamp(plot.r.y, static_cast<float>(SCREEN_PADDING), windowHeight - SCREEN_PADDING - plot.r.h);
         plots.push_back(plot);
     }
 }
@@ -862,9 +932,60 @@ void RenderScreen() {
     }
 }
 
-float clamp(float n, float lower, float upper)
-{
-    return std::max(lower, std::min(n, upper));
+void RenderUI() {
+    scoreText.draw(renderer);
+    if (isMuted) {
+        SDL_RenderCopyF(renderer, mutedT, 0, &soundBtnR);
+    }
+    else {
+        SDL_RenderCopyF(renderer, soundT, 0, &soundBtnR);
+    }
+    hourText.draw(renderer);
+    if (hour >= 7 && hour <= 17) {
+        SDL_RenderCopyF(renderer, sunT, 0, &sunR);
+    }
+    else {
+        SDL_RenderCopyF(renderer, moonT, 0, &sunR);
+    }
+    energyText.draw(renderer);
+    SDL_RenderCopyF(renderer, energyT, 0, &energyR);
+    
+
+    if (foods[0] != Food::Empty) {
+        SDL_RenderCopyF(renderer, GetFoodTexture(foods[0]), 0, &inventorySlotR);
+    }
+    if (foods[1] != Food::Empty) {
+        SDL_RenderCopyF(renderer, GetFoodTexture(foods[1]), 0, &inventorySlot2R);
+    }
+}
+
+void HomeInit() {
+    SDL_FRect tempR;
+    tempR.w = 200;
+    tempR.h = 75;
+    tempR.x = windowWidth / 2.0f - tempR.w / 2.0f;
+    tempR.y = windowHeight - SCREEN_PADDING - tempR.h;
+    backHomeButton.init(renderer, tempR, "Go Back to Farm");
+    backHomeButton.setColors(HOME_BUTTON_SELECTED, HOME_BUTTON_UNSELECTED);
+
+    shopR.w = 96;
+    shopR.h = 96;
+    shopR.x = windowWidth / 2.0f - shopR.w / 2.0f;
+    shopR.y = windowHeight / 2.0f - shopR.h / 2.0f;
+
+    tempR.w = 100;
+    tempR.h = 50;
+    tempR.x = shopR.x + shopR.w / 2.0f - tempR.w / 2.0f;
+    tempR.y = shopR.y + shopR.h + 5;
+    shopButton.init(renderer, tempR, "Shop");
+    shopButton.setColors(HOME_BUTTON_SELECTED, HOME_BUTTON_UNSELECTED);
+}
+
+void RenderHome() {
+    backHomeButton.draw(renderer);
+    shopButton.draw(renderer, shopT, shopR);
+   
+    RenderUI();
 }
 
 void mainLoop()
@@ -965,9 +1086,6 @@ void mainLoop()
             }
             if (event.type == SDL_MOUSEBUTTONDOWN) {
                 buttons[event.button.button] = true;
-                if (SDL_PointInFRect(&mousePos, &shopR)) {
-                    state = State::Shop;
-                }
                 if (SDL_PointInFRect(&mousePos, &soundBtnR)) {
                     isMuted = !isMuted;
                     if (isMuted) {
@@ -1104,7 +1222,13 @@ void mainLoop()
         player.r.x += player.dx * deltaTime * PLAYER_SPEED;
         player.r.y += player.dy * deltaTime * PLAYER_SPEED;
         if (SDL_HasIntersectionF(&houseR, &player.r)) {
-            state = State::Home;
+            if (!exitedHome) {
+                exitedHome = true;
+                state = State::Home;
+            }
+        }
+        else if (exitedHome) {
+            exitedHome = false;
         }
         isCollecting = false;
         for (auto& plot : plots) {
@@ -1121,23 +1245,7 @@ void mainLoop()
         }
 #endif
         RenderScreen();
-        scoreText.draw(renderer);
-        SDL_RenderCopyF(renderer, shopT, 0, &shopR);
-        if (isMuted) {
-            SDL_RenderCopyF(renderer, mutedT, 0, &soundBtnR);
-        }
-        else {
-            SDL_RenderCopyF(renderer, soundT, 0, &soundBtnR);
-        }
-        hourText.draw(renderer);
-        if (hour >= 7 && hour <= 17) {
-            SDL_RenderCopyF(renderer, sunT, 0, &sunR);
-        }
-        else {
-            SDL_RenderCopyF(renderer, moonT, 0, &sunR);
-        }
-        energyText.draw(renderer);
-        SDL_RenderCopyF(renderer, energyT, 0, &energyR);
+        
         if (shouldShowRotImage) {
             SDL_RenderCopyF(renderer, rotT, 0, &rotR);
             SDL_RenderCopyF(renderer, houseflyT, 0, &houseflyR);
@@ -1166,13 +1274,7 @@ void mainLoop()
         SDL_RenderFillRectF(renderer, &inventorySlotR);
         SDL_RenderFillRectF(renderer, &inventorySlot2R);
 
-        if (foods[0] != Food::Empty) {
-            SDL_RenderCopyF(renderer, getFoodTexture(foods[0]), 0, &inventorySlotR);
-        }
-        if (foods[1] != Food::Empty) {
-            SDL_RenderCopyF(renderer, getFoodTexture(foods[1]), 0, &inventorySlot2R);
-        }
-
+        RenderUI();
         SDL_RenderPresent(renderer);
     }
     else if (state == State::Shop) {
@@ -1252,6 +1354,12 @@ void mainLoop()
             }
             if (event.type == SDL_MOUSEBUTTONDOWN) {
                 buttons[event.button.button] = true;
+                if (SDL_PointInFRect(&mousePos, &shopR)) {
+                    state = State::Shop;
+                }
+                else if (SDL_PointInFRect(&mousePos, &backHomeButton.container)) {
+                    state = State::Gameplay;
+                }
             }
             if (event.type == SDL_MOUSEBUTTONUP) {
                 buttons[event.button.button] = false;
@@ -1263,10 +1371,14 @@ void mainLoop()
                 mousePos.y = event.motion.y / scaleY;
                 realMousePos.x = event.motion.x;
                 realMousePos.y = event.motion.y;
+
+                backHomeButton.updateButton();
+                shopButton.updateButton();
             }
         }
         SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
         SDL_RenderClear(renderer);
+        RenderHome();
         SDL_RenderPresent(renderer);
     }
     saveData();
@@ -1287,6 +1399,7 @@ int main(int argc, char* argv[])
     int w, h;
     SDL_GetWindowSize(window, &w, &h);
     SDL_RenderSetScale(renderer, w / (float)windowWidth, h / (float)windowHeight);
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
     SDL_AddEventWatch(eventWatch, 0);
     prefPath = SDL_GetPrefPath("NextCodeApps", "AutumnLeafCollector");
     leavesT = IMG_LoadTexture(renderer, "res/leaves.png");
@@ -1433,6 +1546,7 @@ int main(int argc, char* argv[])
     timeClock.restart();
     potatoClock.restart();
     pumpkinClock.restart();
+    HomeInit();
     for (auto& food : foods) {
         food = Food::Empty;
     }

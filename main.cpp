@@ -69,6 +69,8 @@ using namespace std::chrono_literals;
 #define SUNSET_HOUR_END 17
 #define MAX_ENERGY_INIT 10
 #define PLAYER_SPEED 0.1
+#define BROWN_COLOR 140, 56, 4, 0
+#define GRAY_COLOR 181, 189, 160, 0
 
 int windowWidth = 240;
 int windowHeight = 320;
@@ -507,7 +509,7 @@ struct Player {
 };
 
 enum class State {
-    Gameplay,
+    Outside,
     Shop,
     Intro,
     Home,
@@ -589,6 +591,9 @@ SDL_Texture* tradeT;
 SDL_Texture* playerT;
 SDL_Texture* houseT;
 SDL_Texture* collectT;
+SDL_Texture* doorT;
+SDL_Texture* chestT;
+SDL_Texture* openT;
 Mix_Music* josephKosmaM;
 Mix_Music* antonioVivaldiM;
 SDL_FRect grapeTreeR;
@@ -645,6 +650,11 @@ bool isCollecting = false;
 SDL_FRect inventorySlotR;
 SDL_FRect inventorySlot2R;
 Food foods[2];
+SDL_FRect doorR;
+SDL_FRect chestR;
+bool shouldOpen = false;
+bool isOpened = false;
+std::vector<SDL_FRect> chestRects;
 
 void muteMusicAndSounds()
 {
@@ -692,6 +702,49 @@ void readData()
 float clamp(float n, float lower, float upper)
 {
     return std::max(lower, std::min(n, upper));
+}
+
+void drawInventory()
+{
+    SDL_SetRenderDrawColor(renderer, BROWN_COLOR);
+    SDL_RenderFillRectF(renderer, &inventorySlotR);
+    SDL_RenderFillRectF(renderer, &inventorySlot2R);
+    if (foods[0] == Food::Apple) {
+        SDL_RenderCopyF(renderer, appleT, 0, &inventorySlotR);
+    }
+    else if (foods[0] == Food::Potato) {
+        SDL_RenderCopyF(renderer, potatoT, 0, &inventorySlotR);
+    }
+    else if (foods[0] == Food::Banana) {
+        SDL_RenderCopyF(renderer, bananaT, 0, &inventorySlotR);
+    }
+    else if (foods[0] == Food::Carrot) {
+        SDL_RenderCopyF(renderer, carrotT, 0, &inventorySlotR);
+    }
+    else if (foods[0] == Food::Grape) {
+        SDL_RenderCopyF(renderer, grapeT, 0, &inventorySlotR);
+    }
+    else if (foods[0] == Food::Pumpkin) {
+        SDL_RenderCopyF(renderer, pumpkinT, 0, &inventorySlotR);
+    }
+    if (foods[1] == Food::Apple) {
+        SDL_RenderCopyF(renderer, appleT, 0, &inventorySlot2R);
+    }
+    else if (foods[1] == Food::Potato) {
+        SDL_RenderCopyF(renderer, potatoT, 0, &inventorySlot2R);
+    }
+    else if (foods[1] == Food::Banana) {
+        SDL_RenderCopyF(renderer, bananaT, 0, &inventorySlot2R);
+    }
+    else if (foods[1] == Food::Carrot) {
+        SDL_RenderCopyF(renderer, carrotT, 0, &inventorySlot2R);
+    }
+    else if (foods[1] == Food::Grape) {
+        SDL_RenderCopyF(renderer, grapeT, 0, &inventorySlot2R);
+    }
+    else if (foods[1] == Food::Pumpkin) {
+        SDL_RenderCopyF(renderer, pumpkinT, 0, &inventorySlot2R);
+    }
 }
 
 void mainLoop()
@@ -744,7 +797,7 @@ void mainLoop()
             }
         }
         if (intro.introClock.getElapsedTime() > 1000) {
-            state = State::Gameplay;
+            state = State::Outside;
         }
         SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
         SDL_RenderClear(renderer);
@@ -764,7 +817,7 @@ void mainLoop()
         SDL_RenderPresent(renderer);
         SDL_Delay(8);
     }
-    else if (state == State::Gameplay) {
+    else if (state == State::Outside) {
         SDL_Event event;
         while (SDL_PollEvent(&event)) {
             if (event.type == SDL_QUIT || event.type == SDL_KEYDOWN && event.key.keysym.scancode == SDL_SCANCODE_ESCAPE) {
@@ -944,7 +997,7 @@ void mainLoop()
             }
         }
         player.r.x = clamp(player.r.x, 0, windowWidth - player.r.w);
-        player.r.y = clamp(player.r.y, 0, windowHeight- player.r.h);
+        player.r.y = clamp(player.r.y, 0, windowHeight - player.r.h);
         if (!keys[SDL_SCANCODE_A] && !keys[SDL_SCANCODE_D]
             && !keys[SDL_SCANCODE_W] && !keys[SDL_SCANCODE_S]) {
             isMoving = false;
@@ -1030,45 +1083,7 @@ void mainLoop()
         if (isCollecting) {
             SDL_RenderCopyF(renderer, collectT, 0, &collectR);
         }
-        SDL_SetRenderDrawColor(renderer, 140, 56, 4, 0);
-        SDL_RenderFillRectF(renderer, &inventorySlotR);
-        SDL_RenderFillRectF(renderer, &inventorySlot2R);
-        if (foods[0] == Food::Apple) {
-            SDL_RenderCopyF(renderer, appleT, 0, &inventorySlotR);
-        }
-        else if (foods[0] == Food::Potato) {
-            SDL_RenderCopyF(renderer, potatoT, 0, &inventorySlotR);
-        }
-        else if (foods[0] == Food::Banana) {
-            SDL_RenderCopyF(renderer, bananaT, 0, &inventorySlotR);
-        }
-        else if (foods[0] == Food::Carrot) {
-            SDL_RenderCopyF(renderer, carrotT, 0, &inventorySlotR);
-        }
-        else if (foods[0] == Food::Grape) {
-            SDL_RenderCopyF(renderer, grapeT, 0, &inventorySlotR);
-        }
-        else if (foods[0] == Food::Pumpkin) {
-            SDL_RenderCopyF(renderer, pumpkinT, 0, &inventorySlotR);
-        }
-        if (foods[1] == Food::Apple) {
-            SDL_RenderCopyF(renderer, appleT, 0, &inventorySlot2R);
-        }
-        else if (foods[1] == Food::Potato) {
-            SDL_RenderCopyF(renderer, potatoT, 0, &inventorySlot2R);
-        }
-        else if (foods[1] == Food::Banana) {
-            SDL_RenderCopyF(renderer, bananaT, 0, &inventorySlot2R);
-        }
-        else if (foods[1] == Food::Carrot) {
-            SDL_RenderCopyF(renderer, carrotT, 0, &inventorySlot2R);
-        }
-        else if (foods[1] == Food::Grape) {
-            SDL_RenderCopyF(renderer, grapeT, 0, &inventorySlot2R);
-        }
-        else if (foods[1] == Food::Pumpkin) {
-            SDL_RenderCopyF(renderer, pumpkinT, 0, &inventorySlot2R);
-        }
+        drawInventory();
         SDL_RenderPresent(renderer);
     }
     else if (state == State::Shop) {
@@ -1090,7 +1105,7 @@ void mainLoop()
             if (event.type == SDL_MOUSEBUTTONDOWN) {
                 buttons[event.button.button] = true;
                 if (SDL_PointInFRect(&mousePos, &shop.backArrowR)) {
-                    state = State::Gameplay;
+                    state = State::Outside;
                 }
                 if (SDL_PointInFRect(&mousePos, &shop.lessRotBuyR)) {
                     if (std::stoi(scoreText.text) >= std::stoi(shop.lessRotPriceText.text)) {
@@ -1142,6 +1157,11 @@ void mainLoop()
             }
             if (event.type == SDL_KEYDOWN) {
                 keys[event.key.keysym.scancode] = true;
+                if (event.key.keysym.scancode == SDL_SCANCODE_SPACE) {
+                    if (shouldOpen) {
+                        isOpened = true;
+                    }
+                }
             }
             if (event.type == SDL_KEYUP) {
                 keys[event.key.keysym.scancode] = false;
@@ -1161,8 +1181,54 @@ void mainLoop()
                 realMousePos.y = event.motion.y;
             }
         }
+        player.dx = 0;
+        player.dy = 0;
+        if (keys[SDL_SCANCODE_A]) {
+            player.dx = -1;
+            isOpened=false;
+        }
+        else if (keys[SDL_SCANCODE_D]) {
+            player.dx = 1;
+            isOpened=false;
+        }
+        if (keys[SDL_SCANCODE_W]) {
+            player.dy = -1;
+            isOpened=false;
+        }
+        else if (keys[SDL_SCANCODE_S]) {
+            player.dy = 1;
+            isOpened=false;
+        }
+        player.r.x += player.dx * deltaTime * PLAYER_SPEED;
+        player.r.y += player.dy * deltaTime * PLAYER_SPEED;
+        player.r.x = clamp(player.r.x, 0, windowWidth - player.r.w);
+        player.r.y = clamp(player.r.y, 0, windowHeight - player.r.h);
+        if (SDL_HasIntersectionF(&player.r, &doorR)) {
+            state = State::Outside;
+        }
+        if (SDL_HasIntersectionF(&player.r, &chestR)) {
+            shouldOpen = true;
+        }
+        else {
+            shouldOpen = false;
+        }
         SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
         SDL_RenderClear(renderer);
+        SDL_RenderCopyExF(renderer, chestT, 0, &chestR, 270, 0, SDL_FLIP_NONE);
+        drawInventory();
+        SDL_RenderCopyF(renderer, playerT, 0, &player.r);
+        SDL_RenderCopyF(renderer, doorT, 0, &doorR);
+        if (shouldOpen) {
+            SDL_RenderCopyF(renderer, openT, 0, &collectR);
+        }
+        if (isOpened) {
+        for (int i = 0; i < chestRects.size(); ++i) {
+            SDL_SetRenderDrawColor(renderer, BROWN_COLOR);
+            SDL_RenderFillRectF(renderer, &chestRects[i]);
+            SDL_SetRenderDrawColor(renderer, GRAY_COLOR);
+            SDL_RenderDrawRectF(renderer, &chestRects[i]);
+        }
+        }
         SDL_RenderPresent(renderer);
     }
     saveData();
@@ -1219,6 +1285,9 @@ int main(int argc, char* argv[])
     playerT = IMG_LoadTexture(renderer, "res/player.png");
     houseT = IMG_LoadTexture(renderer, "res/house.png");
     collectT = IMG_LoadTexture(renderer, "res/collect.png");
+    doorT = IMG_LoadTexture(renderer, "res/door.png");
+    chestT = IMG_LoadTexture(renderer, "res/chest.png");
+    openT = IMG_LoadTexture(renderer, "res/open.png");
     josephKosmaM = Mix_LoadMUS("res/autumnLeavesJosephKosma.mp3");
     antonioVivaldiM = Mix_LoadMUS("res/jesienAntonioVivaldi.mp3");
     Mix_PlayMusic(josephKosmaM, 1);
@@ -1325,8 +1394,8 @@ int main(int argc, char* argv[])
     player.r.h = 32;
     player.r.x = houseR.x + houseR.w + 5;
     player.r.y = houseR.y;
-    collectR.w = 72;
-    collectR.h = 52;
+    collectR.w = 80;
+    collectR.h = 60;
     collectR.x = windowWidth / 2 - collectR.w / 2;
     collectR.y = windowHeight - collectR.h;
     inventorySlotR.w = 32;
@@ -1337,6 +1406,23 @@ int main(int argc, char* argv[])
     inventorySlot2R.h = 32;
     inventorySlot2R.x = windowWidth - inventorySlot2R.w;
     inventorySlot2R.y = windowHeight - inventorySlot2R.h;
+    doorR.w = 32;
+    doorR.h = 32;
+    doorR.x = windowWidth - doorR.w - 20;
+    doorR.y = windowHeight / 2 - doorR.h / 2;
+    chestR.w = 32;
+    chestR.h = 32;
+    chestR.x = 20;
+    chestR.y = windowHeight / 2 - chestR.h / 2;
+    for (int i = 0; i < 5; ++i) {
+        for (int j = 0; j < 5; ++j) {
+            chestRects.push_back(SDL_FRect());
+            chestRects.back().w = 32;
+            chestRects.back().h = 32;
+            chestRects.back().x = 0 + chestRects.back().w * i + 40;
+            chestRects.back().y = 0 + chestRects.back().h * j + 80;
+        }
+    }
     readData();
     leafClock.restart();
     globalClock.restart();

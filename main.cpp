@@ -27,6 +27,7 @@
 #include <locale>
 #include <mutex>
 #include <thread>
+#include <array>
 #ifdef __ANDROID__
 #include "vendor/PUGIXML/src/pugixml.hpp"
 #include <android/log.h> //__android_log_print(ANDROID_LOG_VERBOSE, "AutumnLeafCollector", "Example number log: %d", number);
@@ -72,8 +73,8 @@ using namespace std::chrono_literals;
 #define MAX_TREES 3
 #define SCREEN_PADDING 50
 #define EPSILON 0.001
-#define BROWN_COLOR 140, 56, 4, 0
-#define GRAY_COLOR 181, 189, 160, 0
+#define BROWN_COLOR 140, 56, 4, 255
+#define GRAY_COLOR 181, 189, 160, 255
 
 #define HOME_BUTTON_SELECTED \
     {                        \
@@ -133,7 +134,6 @@ SDL_Texture* houseT;
 SDL_Texture* collectT;
 SDL_Texture* drawT;
 SDL_Texture* openT;
-SDL_Texture* chestT;
 Mix_Music* josephKosmaM;
 Mix_Music* antonioVivaldiM;
 
@@ -824,15 +824,11 @@ SDL_FRect collectR;
 bool isCollecting = false;
 SDL_FRect inventorySlotR;
 SDL_FRect inventorySlot2R;
-Food foods[2];
+std::array<Food, 2> foods;
 Button backHomeButton;
 Button shopButton;
-Button chestButton;
 bool exitedHome = false;
 SDL_FRect doorR;
-bool shouldOpen = false;
-bool isOpened = false;
-std::vector<SDL_FRect> chestRects;
 
 void muteMusicAndSounds()
 {
@@ -1029,17 +1025,6 @@ void RenderUI()
     SDL_RenderCopyF(renderer, energyT, 0, &energyR);
     drawInventory();
     SDL_RenderCopyF(renderer, playerT, 0, &player.r);
-    if (shouldOpen) {
-        SDL_RenderCopyF(renderer, openT, 0, &collectR);
-    }
-    if (isOpened) {
-        for (int i = 0; i < chestRects.size(); ++i) {
-            SDL_SetRenderDrawColor(renderer, BROWN_COLOR);
-            SDL_RenderFillRectF(renderer, &chestRects[i]);
-            SDL_SetRenderDrawColor(renderer, GRAY_COLOR);
-            SDL_RenderDrawRectF(renderer, &chestRects[i]);
-        }
-    }
 }
 
 void HomeInit()
@@ -1063,28 +1048,12 @@ void HomeInit()
     tempR.y = shopR.y + shopR.h + 5;
     shopButton.init(renderer, tempR, "Shop");
     shopButton.setColors(HOME_BUTTON_SELECTED, HOME_BUTTON_UNSELECTED);
-
-    chestR.w = 50;
-    chestR.h = 50;
-    chestR.x = tempR.x - chestR.w - 200;
-    chestR.y = tempR.y;
-    chestButton.init(renderer, chestR, "Open chest");
-    chestButton.container.w=85;
-    chestButton.container.h=50;
-    chestButton.text.dstR.w = 85;
-    chestButton.text.dstR.h = 50;
-    chestButton.container.x += 250;
-    chestButton.container.y -= 25;
-    chestButton.text.dstR.x = chestButton.container.x + chestButton.container.w / 2 - chestButton.text.dstR.w / 2;
-    chestButton.text.dstR.y = chestButton.container.y + chestButton.container.h / 2 - chestButton.text.dstR.h / 2;
-    chestButton.setColors(HOME_BUTTON_SELECTED, HOME_BUTTON_UNSELECTED);
 }
 
 void RenderHome()
 {
     backHomeButton.draw(renderer);
     shopButton.draw(renderer, shopT, shopR);
-    chestButton.draw(renderer);
 
     RenderUI();
 }
@@ -1394,7 +1363,7 @@ void mainLoop()
             if (event.type == SDL_MOUSEBUTTONDOWN) {
                 buttons[event.button.button] = true;
                 if (SDL_PointInFRect(&mousePos, &shop.backArrowR)) {
-                    state = State::Outside;
+                    state = State::Home;
                 }
                 if (SDL_PointInFRect(&mousePos, &shop.lessRotBuyR)) {
                     if (std::stoi(scoreText.text) >= std::stoi(shop.lessRotPriceText.text)) {
@@ -1446,11 +1415,6 @@ void mainLoop()
             }
             if (event.type == SDL_KEYDOWN) {
                 keys[event.key.keysym.scancode] = true;
-                if (event.key.keysym.scancode == SDL_SCANCODE_SPACE) {
-                    if (shouldOpen) {
-                        isOpened = true;
-                    }
-                }
             }
             if (event.type == SDL_KEYUP) {
                 keys[event.key.keysym.scancode] = false;
@@ -1488,26 +1452,21 @@ void mainLoop()
 
                 backHomeButton.updateButton();
                 shopButton.updateButton();
-                chestButton.updateButton();
             }
         }
         player.dx = 0;
         player.dy = 0;
         if (keys[SDL_SCANCODE_A]) {
             player.dx = -1;
-            isOpened = false;
         }
         else if (keys[SDL_SCANCODE_D]) {
             player.dx = 1;
-            isOpened = false;
         }
         if (keys[SDL_SCANCODE_W]) {
             player.dy = -1;
-            isOpened = false;
         }
         else if (keys[SDL_SCANCODE_S]) {
             player.dy = 1;
-            isOpened = false;
         }
         player.r.x += player.dx * deltaTime * PLAYER_SPEED;
         player.r.y += player.dy * deltaTime * PLAYER_SPEED;
@@ -1516,11 +1475,31 @@ void mainLoop()
         if (SDL_HasIntersectionF(&player.r, &doorR)) {
             state = State::Outside;
         }
-        if (SDL_HasIntersectionF(&player.r, &chestR)) {
-            shouldOpen = true;
-        }
-        else {
-            shouldOpen = false;
+        for (int i = 0; i < foods.size(); ++i) {
+            if (foods[i] == Food::Apple) {
+                foods[i] = Food::Empty;
+                scoreText.setText(renderer, robotoF, std::stoi(scoreText.text) + 5);
+            }
+            else if (foods[i] == Food::Banana) {
+                foods[i] = Food::Empty;
+                scoreText.setText(renderer, robotoF, std::stoi(scoreText.text) + 3);
+            }
+            else if (foods[i] == Food::Carrot) {
+                foods[i] = Food::Empty;
+                scoreText.setText(renderer, robotoF, std::stoi(scoreText.text) + 5);
+            }
+            else if (foods[i] == Food::Grape) {
+                foods[i] = Food::Empty;
+                scoreText.setText(renderer, robotoF, std::stoi(scoreText.text) + 4);
+            }
+            else if (foods[i] == Food::Potato) {
+                foods[i] = Food::Empty;
+                scoreText.setText(renderer, robotoF, std::stoi(scoreText.text) + 7);
+            }
+            else if (foods[i] == Food::Pumpkin) {
+                foods[i] = Food::Empty;
+                scoreText.setText(renderer, robotoF, std::stoi(scoreText.text) + 2);
+            }
         }
         SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
         SDL_RenderClear(renderer);
@@ -1583,7 +1562,6 @@ int main(int argc, char* argv[])
     houseT = IMG_LoadTexture(renderer, "res/house.png");
     collectT = IMG_LoadTexture(renderer, "res/collect.png");
     openT = IMG_LoadTexture(renderer, "res/open.png");
-    chestT = IMG_LoadTexture(renderer, "res/chest.png");
     josephKosmaM = Mix_LoadMUS("res/autumnLeavesJosephKosma.mp3");
     antonioVivaldiM = Mix_LoadMUS("res/jesienAntonioVivaldi.mp3");
     Mix_PlayMusic(josephKosmaM, 1);
@@ -1691,15 +1669,6 @@ int main(int argc, char* argv[])
     chestR.h = 32;
     chestR.x = 20;
     chestR.y = windowHeight / 2 - chestR.h / 2;
-    for (int i = 0; i < 5; ++i) {
-        for (int j = 0; j < 5; ++j) {
-            chestRects.push_back(SDL_FRect());
-            chestRects.back().w = 32;
-            chestRects.back().h = 32;
-            chestRects.back().x = 0 + chestRects.back().w * i + 40;
-            chestRects.back().y = 0 + chestRects.back().h * j + 80;
-        }
-    }
     readData();
     leafClock.restart();
     globalClock.restart();

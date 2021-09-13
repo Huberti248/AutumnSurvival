@@ -138,6 +138,10 @@ SDL_Texture* xT;
 SDL_Texture* bedT;
 Mix_Music* josephKosmaM;
 Mix_Music* antonioVivaldiM;
+Mix_Chunk* doorS;
+Mix_Chunk* pickupS;
+Mix_Chunk* powerupS;
+Mix_Chunk* sleepS;
 
 void logOutputCallback(void* userdata, int category, SDL_LogPriority priority, const char* message)
 {
@@ -1194,6 +1198,7 @@ void mainLoop()
                             for (auto& plot : plots) {
                                 if (plot.isIntersecting(player.r)) {
                                     foods[index] = plot.food;
+                                    Mix_PlayChannel(-1, pickupS, 0);
                                 }
                             }
                         }
@@ -1338,6 +1343,7 @@ void mainLoop()
             if (!exitedHome) {
                 exitedHome = true;
                 state = State::Home;
+                Mix_PlayChannel(-1, doorS, 0);
             }
         }
         if (exitedHome) {
@@ -1415,12 +1421,14 @@ void mainLoop()
                     if (std::stoi(scoreText.text) >= std::stoi(shop.lessRotPriceText.text)) {
                         scoreText.setText(renderer, robotoF, std::stoi(scoreText.text) - std::stoi(shop.lessRotPriceText.text));
                         rotDelayInMs += 1000;
+                        Mix_PlayChannel(-1, powerupS, 0);
                     }
                 }
                 if (SDL_PointInFRect(&mousePos, &shop.moreEnergyBuyR)) {
                     if (std::stoi(scoreText.text) >= std::stoi(shop.moreEnergyPriceText.text)) {
                         scoreText.setText(renderer, robotoF, std::stoi(scoreText.text) - std::stoi(shop.moreEnergyPriceText.text));
                         ++maxEnergy;
+                        Mix_PlayChannel(-1, powerupS, 0);
                     }
                 }
             }
@@ -1471,6 +1479,7 @@ void mainLoop()
                     if (hour >= 0 && hour < 7 || hour > 17) {
                         state = State::Shop;
                         shouldShowWhenCanSleepAndGoShop = false;
+                        Mix_PlayChannel(-1, doorS, 0);
                     }
                     else {
                         shouldShowWhenCanSleepAndGoShop = true;
@@ -1483,6 +1492,7 @@ void mainLoop()
                         player.r.y = houseR.y + houseR.h / 2 - player.r.h / 2;
                         canCollect = true;
                         shouldShowWhenCanSleepAndGoShop = false;
+                        Mix_PlayChannel(-1, doorS, 0);
                     }
                     else {
                         shouldShowInfoText = true;
@@ -1496,6 +1506,7 @@ void mainLoop()
                         energyText.setText(renderer, robotoF, maxEnergy);
                         shouldGoHome = false;
                         shouldShowInfoText = false;
+                        Mix_PlayChannel(-1, sleepS, 0);
                     }
                     else {
                         shouldShowWhenCanSleepAndGoShop = true;
@@ -1640,6 +1651,10 @@ int main(int argc, char* argv[])
     bedT = IMG_LoadTexture(renderer, "res/bed.png");
     josephKosmaM = Mix_LoadMUS("res/autumnLeavesJosephKosma.mp3");
     antonioVivaldiM = Mix_LoadMUS("res/jesienAntonioVivaldi.mp3");
+    doorS = Mix_LoadWAV("res/door.wav");
+    pickupS = Mix_LoadWAV("res/pickup.wav");
+    powerupS = Mix_LoadWAV("res/powerup.wav");
+    sleepS = Mix_LoadWAV("res/sleep.wav");
     Mix_PlayMusic(josephKosmaM, 1);
     SetPosition();
     soundBtnR.w = 48;

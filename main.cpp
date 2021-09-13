@@ -1162,7 +1162,7 @@ void mainLoop()
             }
             if (event.type == SDL_KEYDOWN) {
                 keys[event.key.keysym.scancode] = true;
-                if (event.key.keysym.scancode == SDL_SCANCODE_SPACE) {
+                if (event.key.keysym.scancode == SDL_SCANCODE_SPACE && hour >= 7 && hour <= 17) {
                     if (foods[0] == Food::Empty || foods[1] == Food::Empty) {
                         int index = foods[0] == Food::Empty ? 0 : 1;
                         for (auto& plot : plots) {
@@ -1446,7 +1446,7 @@ void mainLoop()
             }
             if (event.type == SDL_MOUSEBUTTONDOWN) {
                 buttons[event.button.button] = true;
-                if (SDL_PointInFRect(&mousePos, &shopButton.container)) {
+                if (SDL_PointInFRect(&mousePos, &shopButton.container) && hour >= 0 && hour < 7 || hour > 17) {
                     state = State::Shop;
                 }
                 else if (SDL_PointInFRect(&mousePos, &backHomeButton.container)) {
@@ -1460,11 +1460,13 @@ void mainLoop()
                     }
                 }
                 else if (SDL_PointInFRect(&mousePos, &sleepButton.container)) {
-                    hour = 7;
-                    hourText.setText(renderer, robotoF, std::to_string(hour) + "am");
-                    energyText.setText(renderer, robotoF, maxEnergy);
-                    shouldGoHome = false;
-                    shouldShowInfoText = false;
+                    if (hour >= 0 && hour < 7 || hour > 17) {
+                        hour = 7;
+                        hourText.setText(renderer, robotoF, std::to_string(hour) + "am");
+                        energyText.setText(renderer, robotoF, maxEnergy);
+                        shouldGoHome = false;
+                        shouldShowInfoText = false;
+                    }
                 }
                 if (SDL_PointInFRect(&mousePos, &soundBtnR)) {
                     isMuted = !isMuted;

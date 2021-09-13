@@ -836,6 +836,10 @@ bool exitedHome = false;
 SDL_FRect doorR;
 Text infoText;
 bool shouldShowInfoText;
+Text cantCollectText;
+bool canCollect = true;
+Text canSleepAndGoShopText;
+bool shouldShowWhenCanSleepAndGoShop = false;
 
 void muteMusicAndSounds()
 {
@@ -1078,6 +1082,26 @@ void RenderHome()
     if (shouldShowInfoText) {
         infoText.draw(renderer);
     }
+    if (shouldShowWhenCanSleepAndGoShop) {
+        canSleepAndGoShopText.draw(renderer);
+    }
+}
+
+void moveTimeByOneHour()
+{
+    if (timeClock.getElapsedTime() > 1000) {
+        ++hour;
+        if (hour == 24) {
+            hour = 0;
+        }
+        std::string s = std::to_string(hour);
+        if (hour > 12) {
+            s = std::to_string(hour - 12);
+        }
+        std::string h = s + ((hour <= 12) ? "am" : "pm");
+        hourText.setText(renderer, robotoF, h);
+        timeClock.restart();
+    }
 }
 
 void mainLoop()
@@ -1162,14 +1186,20 @@ void mainLoop()
             }
             if (event.type == SDL_KEYDOWN) {
                 keys[event.key.keysym.scancode] = true;
-                if (event.key.keysym.scancode == SDL_SCANCODE_SPACE && hour >= 7 && hour <= 17) {
-                    if (foods[0] == Food::Empty || foods[1] == Food::Empty) {
-                        int index = foods[0] == Food::Empty ? 0 : 1;
-                        for (auto& plot : plots) {
-                            if (plot.isIntersecting(player.r)) {
-                                foods[index] = plot.food;
+                if (event.key.keysym.scancode == SDL_SCANCODE_SPACE) {
+                    if (hour >= 7 && hour <= 17) {
+                        canCollect = true;
+                        if (foods[0] == Food::Empty || foods[1] == Food::Empty) {
+                            int index = foods[0] == Food::Empty ? 0 : 1;
+                            for (auto& plot : plots) {
+                                if (plot.isIntersecting(player.r)) {
+                                    foods[index] = plot.food;
+                                }
                             }
                         }
+                    }
+                    else {
+                        canCollect = false;
                     }
                 }
             }
@@ -1222,19 +1252,7 @@ void mainLoop()
             rotClock.restart();
         }
         shouldShowRotImage = rotClock.getElapsedTime() + 1000 > rotDelayInMs && std::stoi(scoreText.text) > 0;
-        if (timeClock.getElapsedTime() > 1000) {
-            ++hour;
-            if (hour == 24) {
-                hour = 0;
-            }
-            std::string s = std::to_string(hour);
-            if (hour > 12) {
-                s = std::to_string(hour - 12);
-            }
-            std::string h = s + ((hour <= 12) ? "am" : "pm");
-            hourText.setText(renderer, robotoF, h);
-            timeClock.restart();
-        }
+        moveTimeByOneHour();
         if (tradeClock.getElapsedTime() > 1000) // TODO: Set it to 20000
         {
             tradeRects.push_back(SDL_FRect());
@@ -1367,6 +1385,9 @@ void mainLoop()
         }
         drawInventory();
         RenderUI();
+        if (!canCollect) {
+            cantCollectText.draw(renderer);
+        }
         SDL_RenderPresent(renderer);
     }
     else if (state == State::Shop) {
@@ -1446,14 +1467,22 @@ void mainLoop()
             }
             if (event.type == SDL_MOUSEBUTTONDOWN) {
                 buttons[event.button.button] = true;
-                if (SDL_PointInFRect(&mousePos, &shopButton.container) && hour >= 0 && hour < 7 || hour > 17) {
-                    state = State::Shop;
+                if (SDL_PointInFRect(&mousePos, &shopButton.container)) {
+                    if (hour >= 0 && hour < 7 || hour > 17) {
+                        state = State::Shop;
+                        shouldShowWhenCanSleepAndGoShop = false;
+                    }
+                    else {
+                        shouldShowWhenCanSleepAndGoShop = true;
+                    }
                 }
                 else if (SDL_PointInFRect(&mousePos, &backHomeButton.container)) {
                     if (!shouldGoHome) {
                         state = State::Outside;
                         player.r.x = houseR.x + houseR.w + 5;
                         player.r.y = houseR.y + houseR.h / 2 - player.r.h / 2;
+                        canCollect = true;
+                        shouldShowWhenCanSleepAndGoShop = false;
                     }
                     else {
                         shouldShowInfoText = true;
@@ -1461,11 +1490,15 @@ void mainLoop()
                 }
                 else if (SDL_PointInFRect(&mousePos, &sleepButton.container)) {
                     if (hour >= 0 && hour < 7 || hour > 17) {
+                        shouldShowWhenCanSleepAndGoShop = false;
                         hour = 7;
                         hourText.setText(renderer, robotoF, std::to_string(hour) + "am");
                         energyText.setText(renderer, robotoF, maxEnergy);
                         shouldGoHome = false;
                         shouldShowInfoText = false;
+                    }
+                    else {
+                        shouldShowWhenCanSleepAndGoShop = true;
                     }
                 }
                 if (SDL_PointInFRect(&mousePos, &soundBtnR)) {
@@ -1541,6 +1574,7 @@ void mainLoop()
                 scoreText.setText(renderer, robotoF, std::stoi(scoreText.text) + 2);
             }
         }
+        moveTimeByOneHour();
         SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
         SDL_RenderClear(renderer);
         RenderHome();
@@ -1722,6 +1756,16 @@ int main(int argc, char* argv[])
     infoText.dstR.h = 40;
     infoText.dstR.x = windowWidth / 2 - infoText.dstR.w / 2;
     infoText.dstR.y = 200;
+    cantCollectText.setText(renderer, robotoF, "You can't collect in the night");
+    cantCollectText.dstR.w = 180;
+    cantCollectText.dstR.h = 40;
+    cantCollectText.dstR.x = windowWidth / 2 - cantCollectText.dstR.w / 2;
+    cantCollectText.dstR.y = 250;
+    canSleepAndGoShopText.setText(renderer, robotoF, "You can sleep and go shop only in the night");
+    canSleepAndGoShopText.dstR.w = 220;
+    canSleepAndGoShopText.dstR.h = 40;
+    canSleepAndGoShopText.dstR.x = windowWidth / 2 - canSleepAndGoShopText.dstR.w / 2;
+    canSleepAndGoShopText.dstR.y = infoText.dstR.y - canSleepAndGoShopText.dstR.h;
     readData();
     leafClock.restart();
     globalClock.restart();

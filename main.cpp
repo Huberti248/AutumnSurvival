@@ -135,6 +135,7 @@ SDL_Texture* collectT;
 SDL_Texture* drawT;
 SDL_Texture* openT;
 SDL_Texture* xT;
+SDL_Texture* bedT;
 Mix_Music* josephKosmaM;
 Mix_Music* antonioVivaldiM;
 
@@ -830,8 +831,11 @@ SDL_FRect inventorySlotX2R;
 std::array<Food, 2> foods;
 Button backHomeButton;
 Button shopButton;
+Button sleepButton;
 bool exitedHome = false;
 SDL_FRect doorR;
+Text infoText;
+bool shouldShowInfoText;
 
 void muteMusicAndSounds()
 {
@@ -1057,14 +1061,23 @@ void HomeInit()
     tempR.y = shopR.y + shopR.h + 5;
     shopButton.init(renderer, tempR, "Shop");
     shopButton.setColors(HOME_BUTTON_SELECTED, HOME_BUTTON_UNSELECTED);
+
+    sleepButton.init(renderer, tempR, "Sleep");
+    sleepButton.setColors(HOME_BUTTON_SELECTED, HOME_BUTTON_UNSELECTED);
 }
 
 void RenderHome()
 {
     backHomeButton.draw(renderer);
     shopButton.draw(renderer, shopT, shopR);
+    shopR.x -= 200;
+    sleepButton.draw(renderer, bedT, shopR);
+    shopR.x += 200;
 
     RenderUI();
+    if (shouldShowInfoText) {
+        infoText.draw(renderer);
+    }
 }
 
 void mainLoop()
@@ -1221,9 +1234,6 @@ void mainLoop()
             std::string h = s + ((hour <= 12) ? "am" : "pm");
             hourText.setText(renderer, robotoF, h);
             timeClock.restart();
-        }
-        if (hour == SUNSET_HOUR_END + 1) {
-            energyText.setText(renderer, robotoF, maxEnergy);
         }
         if (tradeClock.getElapsedTime() > 1000) // TODO: Set it to 20000
         {
@@ -1436,13 +1446,25 @@ void mainLoop()
             }
             if (event.type == SDL_MOUSEBUTTONDOWN) {
                 buttons[event.button.button] = true;
-                if (SDL_PointInFRect(&mousePos, &shopR)) {
+                if (SDL_PointInFRect(&mousePos, &shopButton.container)) {
                     state = State::Shop;
                 }
                 else if (SDL_PointInFRect(&mousePos, &backHomeButton.container)) {
-                    state = State::Outside;
-                    player.r.x = houseR.x + houseR.w + 5;
-                    player.r.y = houseR.y + houseR.h / 2 - player.r.h / 2;
+                    if (!shouldGoHome) {
+                        state = State::Outside;
+                        player.r.x = houseR.x + houseR.w + 5;
+                        player.r.y = houseR.y + houseR.h / 2 - player.r.h / 2;
+                    }
+                    else {
+                        shouldShowInfoText = true;
+                    }
+                }
+                else if (SDL_PointInFRect(&mousePos, &sleepButton.container)) {
+                    hour = 7;
+                    hourText.setText(renderer, robotoF, std::to_string(hour) + "am");
+                    energyText.setText(renderer, robotoF, maxEnergy);
+                    shouldGoHome = false;
+                    shouldShowInfoText = false;
                 }
                 if (SDL_PointInFRect(&mousePos, &soundBtnR)) {
                     isMuted = !isMuted;
@@ -1467,6 +1489,7 @@ void mainLoop()
 
                 backHomeButton.updateButton();
                 shopButton.updateButton();
+                sleepButton.updateButton();
             }
         }
         player.dx = 0;
@@ -1578,6 +1601,7 @@ int main(int argc, char* argv[])
     collectT = IMG_LoadTexture(renderer, "res/collect.png");
     openT = IMG_LoadTexture(renderer, "res/open.png");
     xT = IMG_LoadTexture(renderer, "res/x.png");
+    bedT = IMG_LoadTexture(renderer, "res/bed.png");
     josephKosmaM = Mix_LoadMUS("res/autumnLeavesJosephKosma.mp3");
     antonioVivaldiM = Mix_LoadMUS("res/jesienAntonioVivaldi.mp3");
     Mix_PlayMusic(josephKosmaM, 1);
@@ -1691,6 +1715,11 @@ int main(int argc, char* argv[])
     chestR.h = 32;
     chestR.x = 20;
     chestR.y = windowHeight / 2 - chestR.h / 2;
+    infoText.setText(renderer, robotoF, "You don't have enought energy to leave");
+    infoText.dstR.w = 250;
+    infoText.dstR.h = 40;
+    infoText.dstR.x = windowWidth / 2 - infoText.dstR.w / 2;
+    infoText.dstR.y = 200;
     readData();
     leafClock.restart();
     globalClock.restart();

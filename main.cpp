@@ -1559,30 +1559,34 @@ void mainLoop()
         if (SDL_HasIntersectionF(&player.r, &doorR)) {
             state = State::Outside;
         }
+        std::vector<int> scoreGain;
+        for (int i = 0; i < (int)(Food::NumFood) - 1; ++i) {
+            scoreGain.push_back(random(1, 10));
+        }
         for (int i = 0; i < foods.size(); ++i) {
             if (foods[i] == Food::Apple) {
                 foods[i] = Food::Empty;
-                scoreText.setText(renderer, robotoF, std::stoi(scoreText.text) + 5);
+                scoreText.setText(renderer, robotoF, std::stoi(scoreText.text) + scoreGain[(int)(Food::Apple)]);
             }
             else if (foods[i] == Food::Banana) {
                 foods[i] = Food::Empty;
-                scoreText.setText(renderer, robotoF, std::stoi(scoreText.text) + 3);
+                scoreText.setText(renderer, robotoF, std::stoi(scoreText.text) + +scoreGain[(int)(Food::Banana)]);
             }
             else if (foods[i] == Food::Carrot) {
                 foods[i] = Food::Empty;
-                scoreText.setText(renderer, robotoF, std::stoi(scoreText.text) + 5);
+                scoreText.setText(renderer, robotoF, std::stoi(scoreText.text) + +scoreGain[(int)(Food::Carrot)]);
             }
             else if (foods[i] == Food::Grape) {
                 foods[i] = Food::Empty;
-                scoreText.setText(renderer, robotoF, std::stoi(scoreText.text) + 4);
+                scoreText.setText(renderer, robotoF, std::stoi(scoreText.text) + +scoreGain[(int)(Food::Grape)]);
             }
             else if (foods[i] == Food::Potato) {
                 foods[i] = Food::Empty;
-                scoreText.setText(renderer, robotoF, std::stoi(scoreText.text) + 7);
+                scoreText.setText(renderer, robotoF, std::stoi(scoreText.text) + +scoreGain[(int)(Food::Potato)]);
             }
             else if (foods[i] == Food::Pumpkin) {
                 foods[i] = Food::Empty;
-                scoreText.setText(renderer, robotoF, std::stoi(scoreText.text) + 2);
+                scoreText.setText(renderer, robotoF, std::stoi(scoreText.text) + +scoreGain[(int)(Food::Pumpkin)]);
             }
         }
         moveTimeByOneHour();

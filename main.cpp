@@ -136,6 +136,10 @@ SDL_Texture* drawT;
 SDL_Texture* openT;
 SDL_Texture* xT;
 SDL_Texture* bedT;
+SDL_Texture* lightT;
+SDL_Texture* bgLayerT;
+SDL_Texture* lightLayerT;
+SDL_Texture* resultLayerT;
 Mix_Music* josephKosmaM;
 Mix_Music* antonioVivaldiM;
 Mix_Chunk* doorS;
@@ -1358,13 +1362,10 @@ void mainLoop()
         }
         SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
         SDL_RenderClear(renderer);
-#if 0 // TODO: Turn it on when done?
-        for (int i = 0; i < tradeRects.size(); ++i) {
-            SDL_RenderCopyF(renderer, tradeT, 0, &tradeRects[i]);
-        }
-#endif
+        SDL_SetRenderTarget(renderer, bgLayerT);
+        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
+        SDL_RenderClear(renderer);
         RenderScreen();
-
         if (shouldShowRotImage) {
             SDL_RenderCopyF(renderer, rotT, 0, &rotR);
             SDL_RenderCopyF(renderer, houseflyT, 0, &houseflyR);
@@ -1389,6 +1390,35 @@ void mainLoop()
         if (isCollecting) {
             SDL_RenderCopyF(renderer, collectT, 0, &collectR);
         }
+        SDL_SetRenderTarget(renderer, 0);
+
+        SDL_SetRenderTarget(renderer, lightLayerT);
+        SDL_SetTextureBlendMode(lightLayerT, SDL_BLENDMODE_MOD);
+        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
+        SDL_RenderClear(renderer);
+        SDL_FRect spotR = player.r;
+        spotR.x -= 200;
+        spotR.y -= 200;
+        spotR.w += 400;
+        spotR.h += 400;
+        if (hour >= 7 && hour <= 17) {
+            spotR.w = windowWidth + 400;
+            spotR.h = windowHeight + 400;
+            spotR.x = -200;
+            spotR.y = -200;
+        }
+        SDL_RenderCopyF(renderer, lightT, 0, &spotR);
+        SDL_SetRenderTarget(renderer, 0);
+
+        SDL_SetRenderTarget(renderer, resultLayerT);
+        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
+        SDL_RenderClear(renderer);
+        SDL_SetTextureBlendMode(resultLayerT, SDL_BLENDMODE_BLEND);
+        SDL_RenderCopy(renderer, bgLayerT, 0, 0);
+        SDL_RenderCopy(renderer, lightLayerT, 0, 0);
+
+        SDL_SetRenderTarget(renderer, 0);
+        SDL_RenderCopy(renderer, resultLayerT, 0, 0);
         drawInventory();
         RenderUI();
         if (!canCollect) {
@@ -1560,7 +1590,7 @@ void mainLoop()
             state = State::Outside;
         }
         std::vector<int> scoreGain;
-        for (int i = 0; i < (int)(Food::NumFood) - 1; ++i) {
+        for (int i = 0; i < (int)(Food::NumFood)-1; ++i) {
             scoreGain.push_back(random(1, 10));
         }
         for (int i = 0; i < foods.size(); ++i) {
@@ -1653,6 +1683,7 @@ int main(int argc, char* argv[])
     openT = IMG_LoadTexture(renderer, "res/open.png");
     xT = IMG_LoadTexture(renderer, "res/x.png");
     bedT = IMG_LoadTexture(renderer, "res/bed.png");
+    lightT = IMG_LoadTexture(renderer, "res/light.png");
     josephKosmaM = Mix_LoadMUS("res/autumnLeavesJosephKosma.mp3");
     antonioVivaldiM = Mix_LoadMUS("res/jesienAntonioVivaldi.mp3");
     doorS = Mix_LoadWAV("res/door.wav");
@@ -1785,6 +1816,9 @@ int main(int argc, char* argv[])
     canSleepAndGoShopText.dstR.h = 40;
     canSleepAndGoShopText.dstR.x = windowWidth / 2 - canSleepAndGoShopText.dstR.w / 2;
     canSleepAndGoShopText.dstR.y = infoText.dstR.y - canSleepAndGoShopText.dstR.h;
+    bgLayerT = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, windowWidth, windowHeight);
+    lightLayerT = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, windowWidth, windowHeight);
+    resultLayerT = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, windowWidth, windowHeight);
     readData();
     leafClock.restart();
     globalClock.restart();

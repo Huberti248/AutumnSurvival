@@ -75,6 +75,7 @@ using namespace std::chrono_literals;
 #define EPSILON 0.001
 #define BROWN_COLOR 140, 56, 4, 255
 #define GRAY_COLOR 181, 189, 160, 255
+#define PART_SPEED 0.1
 
 #define HOME_BUTTON_SELECTED \
     {                        \
@@ -140,6 +141,7 @@ SDL_Texture* lightT;
 SDL_Texture* bgLayerT;
 SDL_Texture* lightLayerT;
 SDL_Texture* resultLayerT;
+SDL_Texture* currentPartT;
 Mix_Music* josephKosmaM;
 Mix_Music* antonioVivaldiM;
 Mix_Chunk* doorS;
@@ -746,6 +748,7 @@ enum class State {
     Shop,
     Intro,
     Home,
+    Minigame,
 };
 
 struct Shop {
@@ -777,6 +780,10 @@ struct Intro {
     SDL_FRect leafR{};
     Motion leafMotion = Motion::Right;
     int leafAngle = 0;
+};
+
+struct Part {
+    SDL_FRect dstR{};
 };
 
 SDL_FRect grapeTreeR;
@@ -848,6 +855,7 @@ Text cantCollectText;
 bool canCollect = true;
 Text canSleepAndGoShopText;
 bool shouldShowWhenCanSleepAndGoShop = false;
+std::vector<Part> parts;
 
 void muteMusicAndSounds()
 {
@@ -1201,8 +1209,32 @@ void mainLoop()
                             int index = foods[0] == Food::Empty ? 0 : 1;
                             for (auto& plot : plots) {
                                 if (plot.isIntersecting(player.r)) {
-                                    foods[index] = plot.food;
-                                    Mix_PlayChannel(-1, pickupS, 0);
+                                    state = State::Minigame;
+                                    if (plot.food == Food::Apple) {
+                                        currentPartT = appleT;
+                                    }
+                                    else if (plot.food == Food::Banana) {
+                                        currentPartT = bananaT;
+                                    }
+                                    else if (plot.food == Food::Carrot) {
+                                        currentPartT = carrotT;
+                                    }
+                                    else if (plot.food == Food::Grape) {
+                                        currentPartT = grapeT;
+                                    }
+                                    else if (plot.food == Food::Potato) {
+                                        currentPartT = potatoT;
+                                    }
+                                    else if (plot.food == Food::Pumpkin) {
+                                        currentPartT = pumpkinT;
+                                    }
+                                    for (int i = 0; i < 10; ++i) {
+                                        parts.push_back(Part());
+                                        parts.back().dstR.w = 32;
+                                        parts.back().dstR.h = 32;
+                                        parts.back().dstR.x = random(0, windowWidth - parts.back().dstR.w);
+                                        parts.back().dstR.y = -parts.back().dstR.h;
+                                    }
                                 }
                             }
                         }
@@ -1623,6 +1655,80 @@ void mainLoop()
         SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
         SDL_RenderClear(renderer);
         RenderHome();
+        SDL_RenderPresent(renderer);
+    }
+    else if (state == State::Minigame) {
+        SDL_Event event;
+        while (SDL_PollEvent(&event)) {
+            if (event.type == SDL_QUIT || event.type == SDL_KEYDOWN && event.key.keysym.scancode == SDL_SCANCODE_ESCAPE) {
+                running = false;
+                // TODO: On mobile remember to use eventWatch function (it doesn't reach this code when terminating)
+            }
+            if (event.type == SDL_WINDOWEVENT && event.window.event == SDL_WINDOWEVENT_RESIZED) {
+                SDL_RenderSetScale(renderer, event.window.data1 / (float)windowWidth, event.window.data2 / (float)windowHeight);
+            }
+            if (event.type == SDL_KEYDOWN) {
+                keys[event.key.keysym.scancode] = true;
+            }
+            if (event.type == SDL_KEYUP) {
+                keys[event.key.keysym.scancode] = false;
+            }
+            if (event.type == SDL_MOUSEBUTTONDOWN) {
+                buttons[event.button.button] = true;
+                for (int i = 0; i < parts.size(); ++i) {
+                    if (SDL_PointInFRect(&mousePos, &parts[i].dstR)) {
+                        parts.erase(parts.begin() + i--);
+                        if (parts.empty()) {
+                            state = State::Outside;
+                            int index = foods[0] == Food::Empty ? 0 : 1;
+                            if (currentPartT == appleT) {
+                                foods[index] = Food::Apple;
+                            }
+                            else if (currentPartT == bananaT) {
+                                foods[index] = Food::Banana;
+                            }
+                            else if (currentPartT == grapeT) {
+                                foods[index] = Food::Grape;
+                            }
+                            else if (currentPartT == carrotT) {
+                                foods[index] = Food::Carrot;
+                            }
+                            else if (currentPartT == potatoT) {
+                                foods[index] = Food::Potato;
+                            }
+                            else if (currentPartT == pumpkinT) {
+                                foods[index] = Food::Pumpkin;
+                            }
+                        }
+                    }
+                }
+            }
+            if (event.type == SDL_MOUSEBUTTONUP) {
+                buttons[event.button.button] = false;
+            }
+            if (event.type == SDL_MOUSEMOTION) {
+                float scaleX, scaleY;
+                SDL_RenderGetScale(renderer, &scaleX, &scaleY);
+                mousePos.x = event.motion.x / scaleX;
+                mousePos.y = event.motion.y / scaleY;
+                realMousePos.x = event.motion.x;
+                realMousePos.y = event.motion.y;
+            }
+        }
+        for (int i = 0; i < parts.size(); ++i) {
+            parts[i].dstR.y += PART_SPEED * deltaTime;
+        }
+        for (int i = 0; i < parts.size(); ++i) {
+            if (parts[i].dstR.y + parts[i].dstR.h > windowHeight) {
+                state = State::Outside;
+                parts.clear();
+            }
+        }
+        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
+        SDL_RenderClear(renderer);
+        for (int i = 0; i < parts.size(); ++i) {
+            SDL_RenderCopyF(renderer, currentPartT, 0, &parts[i].dstR);
+        }
         SDL_RenderPresent(renderer);
     }
     saveData();

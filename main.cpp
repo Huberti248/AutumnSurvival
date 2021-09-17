@@ -786,13 +786,40 @@ struct Part {
     SDL_FRect dstR{};
 };
 
+struct Tile {
+    SDL_FRect dstR{};
+    SDL_Rect srcR{};
+    std::string source;
+    int id = 0;
+};
+
+SDL_Texture* getT(SDL_Renderer* renderer, std::string name)
+{
+    static std::unordered_map<std::string, SDL_Texture*> map;
+    auto it = map.find(name);
+    if (it == map.end()) {
+        SDL_Texture* t = IMG_LoadTexture(renderer, ("res/" + name).c_str());
+        map.insert({ name, t });
+        return t;
+    }
+    else {
+        return it->second;
+    }
+}
+
+enum class PlayerDirection {
+    Left,
+    Right,
+    Up,
+    Down,
+};
+
 SDL_FRect grapeTreeR;
 SDL_FRect appleTreeR;
 SDL_FRect bananaTreeR;
 SDL_FRect carrotTreeR;
 SDL_FRect potatoTreeR;
 SDL_FRect pumpkinTreeR;
-std::vector<Plot> plots;
 SDL_FRect soundBtnR;
 std::vector<Entity> entities;
 Clock leafClock;
@@ -848,7 +875,6 @@ Button backHomeButton;
 Button shopButton;
 Button sleepButton;
 bool exitedHome = false;
-SDL_FRect doorR;
 Text infoText;
 bool shouldShowInfoText;
 Text cantCollectText;
@@ -856,6 +882,14 @@ bool canCollect = true;
 Text canSleepAndGoShopText;
 bool shouldShowWhenCanSleepAndGoShop = false;
 std::vector<Part> parts;
+int mapWidth;
+int mapHeight;
+std::vector<Tile> tiles;
+std::vector<Plot> plots;
+std::vector<SDL_Rect> playerAnimationFrames;
+int playerAnimationFrame;
+Clock playerAnimationClock;
+PlayerDirection playerDirection;
 
 void muteMusicAndSounds()
 {
@@ -903,83 +937,6 @@ void readData()
 float clamp(float n, float lower, float upper)
 {
     return std::max(lower, std::min(n, upper));
-}
-
-void SetPosition()
-{
-    houseR.w = 64;
-    houseR.h = 64;
-    houseR.x = windowWidth / 2 - houseR.w / 2;
-    houseR.y = windowHeight / 2 - houseR.h / 2;
-
-    int numPlots = static_cast<int>(Food::NumFood);
-    float angleIncrement = 2 * M_PI / numPlots;
-    float distanceH = windowHeight - 2.0f * SCREEN_PADDING;
-    float distanceW = windowWidth - 2.0f * SCREEN_PADDING;
-
-    for (int i = 0; i < numPlots; ++i) {
-        Plot plot{};
-        plot.setFood(static_cast<Food>(i));
-
-        float angle = angleIncrement * i;
-        angle += (M_PI / 2.0f);
-        if (angle < -M_PI) {
-            angle += 2 * M_PI;
-        }
-        if (angle > M_PI) {
-            angle -= 2 * M_PI;
-        }
-        float tanAngle = atan2f(distanceH, distanceW);
-
-        int region;
-        if ((angle > -tanAngle) && (angle <= tanAngle)) {
-            region = 1;
-        }
-        else if ((angle > tanAngle)
-            && (angle <= (M_PI - tanAngle))) {
-            region = 2;
-        }
-        else if ((angle > (M_PI - tanAngle))
-            || (angle <= -(M_PI - tanAngle))) {
-            region = 3;
-        }
-        else {
-            region = 4;
-        }
-
-        float xMultiplier = 1;
-        float yMultiplier = 1;
-        switch (region) {
-        case 1:
-            yMultiplier = -1;
-            break;
-        case 2:
-            yMultiplier = -1;
-            break;
-        case 3:
-            xMultiplier = -1;
-            break;
-        case 4:
-            xMultiplier = -1;
-            break;
-        }
-
-        if ((abs(angle - M_PI * 0.5f) < EPSILON) || (abs(angle + M_PI * 0.5f) < EPSILON)) {
-            angle = 0.0f;
-        }
-        float theta = tanf(angle);
-        if (region == 1 || region == 3) {
-            plot.r.x = windowWidth / 2.0f + xMultiplier * distanceW / 2.0f;
-            plot.r.y = windowHeight / 2.0f + yMultiplier * distanceW / 2.0f * theta - plot.r.h / 2.0f;
-        }
-        else {
-            plot.r.x = windowWidth / 2.0f + xMultiplier * distanceH / 2.0f * theta - plot.r.w / 2.0f;
-            plot.r.y = windowHeight / 2.0f + yMultiplier * distanceH / 2.0f;
-        }
-        plot.r.x = clamp(plot.r.x, static_cast<float>(SCREEN_PADDING), windowWidth - SCREEN_PADDING - plot.r.w);
-        plot.r.y = clamp(plot.r.y, static_cast<float>(SCREEN_PADDING), windowHeight - SCREEN_PADDING - plot.r.h);
-        plots.push_back(plot);
-    }
 }
 
 void RenderScreen()
@@ -1057,7 +1014,6 @@ void RenderUI()
     energyText.draw(renderer);
     SDL_RenderCopyF(renderer, energyT, 0, &energyR);
     drawInventory();
-    SDL_RenderCopyF(renderer, playerT, 0, &player.r);
 }
 
 void HomeInit()
@@ -1117,6 +1073,278 @@ void moveTimeByOneHour()
         std::string h = s + ((hour <= 12) ? "am" : "pm");
         hourText.setText(renderer, robotoF, h);
         timeClock.restart();
+    }
+}
+
+void loadMap(std::string path)
+{
+    pugi::xml_document doc;
+    std::size_t length;
+    char* buffer = (char*)SDL_LoadFile(path.c_str(), &length);
+    doc.load_buffer(buffer, length);
+    SDL_free(buffer);
+    pugi::xml_node mapNode = doc.child("map");
+    mapWidth = mapNode.attribute("width").as_int() * mapNode.attribute("tilewidth").as_int();
+    mapHeight = mapNode.attribute("height").as_int() * mapNode.attribute("tileheight").as_int();
+    auto layersIt = mapNode.children("layer");
+    for (pugi::xml_node& layer : layersIt) {
+        std::vector<int> data;
+        {
+            std::string csv = layer.child("data").text().as_string();
+            std::stringstream ss(csv);
+            std::string value;
+            while (std::getline(ss, value, ',')) {
+                data.push_back(std::stoi(value));
+            }
+        }
+        for (int y = 0; y < mapNode.attribute("height").as_int(); ++y) {
+            for (int x = 0; x < mapNode.attribute("width").as_int(); ++x) {
+                Tile t;
+                t.dstR.w = mapNode.attribute("tilewidth").as_int();
+                t.dstR.h = mapNode.attribute("tileheight").as_int();
+                t.dstR.x = x * t.dstR.w;
+                t.dstR.y = y * t.dstR.h;
+                int h = mapNode.attribute("height").as_int();
+                int id = data[y * mapNode.attribute("width").as_int() + x];
+                t.id = id;
+                if (id != 0) {
+                    pugi::xml_node tilesetNode;
+                    auto tilesetsIt = mapNode.children("tileset");
+                    for (pugi::xml_node& tileset : tilesetsIt) {
+                        int firstgid = tileset.attribute("firstgid").as_int();
+                        int tileCount = tileset.attribute("tilecount").as_int();
+                        int lastGid = firstgid + tileCount - 1;
+                        if (id >= firstgid && id <= lastGid) {
+                            tilesetNode = tileset;
+                            break;
+                        }
+                    }
+                    t.srcR.w = tilesetNode.attribute("tilewidth").as_int();
+                    t.srcR.h = tilesetNode.attribute("tileheight").as_int();
+                    t.srcR.x = (id - tilesetNode.attribute("firstgid").as_int()) % tilesetNode.attribute("columns").as_int() * t.srcR.w;
+                    t.srcR.y = (id - tilesetNode.attribute("firstgid").as_int()) / tilesetNode.attribute("columns").as_int() * t.srcR.h;
+                    t.source = tilesetNode.child("image").attribute("source").as_string();
+                    tiles.push_back(t);
+                }
+            }
+        }
+    }
+    auto rd = std::random_device{};
+    auto rng = std::default_random_engine{ rd() };
+shuffleBegin:
+    std::shuffle(std::begin(tiles), std::end(tiles), rng);
+    std::vector<int> trees;
+    // NOTE: Assume that there are no empty tiles
+    for (int y = 0; y < mapNode.attribute("height").as_int(); ++y) {
+        for (int x = 0; x < mapNode.attribute("width").as_int(); ++x) {
+            int index = x + (y * mapNode.attribute("width").as_int());
+            // NOTE: Some of them shouldn't be placed together (trees). Randomize, if they are too close randomize once again
+            if (tiles[index].source != "sand_tile.png") {
+                trees.push_back(index);
+                int lU = (x - 1) + ((y - 1) * mapNode.attribute("width").as_int());
+                int u = (x) + ((y - 1) * mapNode.attribute("width").as_int());
+                int rU = (x + 1) + ((y - 1) * mapNode.attribute("width").as_int());
+                int l = (x - 1) + ((y)*mapNode.attribute("width").as_int());
+                int r = (x + 1) + ((y)*mapNode.attribute("width").as_int());
+                int lD = (x - 1) + ((y + 1) * mapNode.attribute("width").as_int());
+                int d = (x) + ((y + 1) * mapNode.attribute("width").as_int());
+                int rD = (x + 1) + ((y + 1) * mapNode.attribute("width").as_int());
+                // TODO: Prevent trees being so close that on click you pickup two, three of more at the same time
+                // TODO: Tree shouldn't go out of border
+                // TODO: Fix black tiles at the bottom
+                if (lU >= 0 && lU < tiles.size()) {
+                    if (tiles[lU].source != "sand_tile.png") {
+                        goto shuffleBegin;
+                    }
+                }
+                if (u >= 0 && u < tiles.size()) {
+                    if (tiles[u].source != "sand_tile.png") {
+                        goto shuffleBegin;
+                    }
+                }
+                if (rU >= 0 && rU < tiles.size()) {
+                    if (tiles[rU].source != "sand_tile.png") {
+                        goto shuffleBegin;
+                    }
+                }
+                if (l >= 0 && l < tiles.size()) {
+                    if (tiles[l].source != "sand_tile.png") {
+                        goto shuffleBegin;
+                    }
+                }
+                if (r >= 0 && r < tiles.size()) {
+                    if (tiles[r].source != "sand_tile.png") {
+                        goto shuffleBegin;
+                    }
+                }
+                if (lD >= 0 && lD < tiles.size()) {
+                    if (tiles[lD].source != "sand_tile.png") {
+                        goto shuffleBegin;
+                    }
+                }
+                if (d >= 0 && d < tiles.size()) {
+                    if (tiles[d].source != "sand_tile.png") {
+                        goto shuffleBegin;
+                    }
+                }
+                if (rD >= 0 && rD < tiles.size()) {
+                    if (tiles[rD].source != "sand_tile.png") {
+                        goto shuffleBegin;
+                    }
+                }
+                int lU2 = (x - 2) + ((y - 2) * mapNode.attribute("width").as_int());
+                int u2 = (x) + ((y - 2) * mapNode.attribute("width").as_int());
+                int rU2 = (x + 2) + ((y - 2) * mapNode.attribute("width").as_int());
+                int l2 = (x - 2) + ((y)*mapNode.attribute("width").as_int());
+                int r2 = (x + 2) + ((y)*mapNode.attribute("width").as_int());
+                int lD2 = (x - 2) + ((y + 2) * mapNode.attribute("width").as_int());
+                int d2 = (x) + ((y + 2) * mapNode.attribute("width").as_int());
+                int rD2 = (x + 2) + ((y + 2) * mapNode.attribute("width").as_int());
+
+                int lU3 = (x - 2) + ((y - 1) * mapNode.attribute("width").as_int());
+                int lU4 = (x - 1) + ((y - 2) * mapNode.attribute("width").as_int());
+
+                int rU3 = (x + 2) + ((y - 1) * mapNode.attribute("width").as_int());
+                int rU4 = (x + 1) + ((y - 2) * mapNode.attribute("width").as_int());
+
+                int rD3 = (x + 2) + ((y + 1) * mapNode.attribute("width").as_int());
+                int rD4 = (x + 1) + ((y + 2) * mapNode.attribute("width").as_int());
+
+                int lD3 = (x - 2) + ((y + 1) * mapNode.attribute("width").as_int());
+                int lD4 = (x - 1) + ((y + 2) * mapNode.attribute("width").as_int());
+
+                if (lU2 >= 0 && lU2 < tiles.size()) {
+                    if (tiles[lU2].source != "sand_tile.png") {
+                        goto shuffleBegin;
+                    }
+                }
+                if (u2 >= 0 && u2 < tiles.size()) {
+                    if (tiles[u2].source != "sand_tile.png") {
+                        goto shuffleBegin;
+                    }
+                }
+                if (rU2 >= 0 && rU2 < tiles.size()) {
+                    if (tiles[rU2].source != "sand_tile.png") {
+                        goto shuffleBegin;
+                    }
+                }
+                if (l2 >= 0 && l2 < tiles.size()) {
+                    if (tiles[l2].source != "sand_tile.png") {
+                        goto shuffleBegin;
+                    }
+                }
+                if (r2 >= 0 && r2 < tiles.size()) {
+                    if (tiles[r2].source != "sand_tile.png") {
+                        goto shuffleBegin;
+                    }
+                }
+                if (lD2 >= 0 && lD2 < tiles.size()) {
+                    if (tiles[lD2].source != "sand_tile.png") {
+                        goto shuffleBegin;
+                    }
+                }
+                if (d2 >= 0 && d2 < tiles.size()) {
+                    if (tiles[d2].source != "sand_tile.png") {
+                        goto shuffleBegin;
+                    }
+                }
+                if (rD2 >= 0 && rD2 < tiles.size()) {
+                    if (tiles[rD2].source != "sand_tile.png") {
+                        goto shuffleBegin;
+                    }
+                }
+
+                if (lU3 >= 0 && lU3 < tiles.size()) {
+                    if (tiles[lU3].source != "sand_tile.png") {
+                        goto shuffleBegin;
+                    }
+                }
+                if (lU4 >= 0 && lU4 < tiles.size()) {
+                    if (tiles[lU4].source != "sand_tile.png") {
+                        goto shuffleBegin;
+                    }
+                }
+                if (rU3 >= 0 && rU3 < tiles.size()) {
+                    if (tiles[rU3].source != "sand_tile.png") {
+                        goto shuffleBegin;
+                    }
+                }
+                if (rU4 >= 0 && rU4 < tiles.size()) {
+                    if (tiles[rU4].source != "sand_tile.png") {
+                        goto shuffleBegin;
+                    }
+                }
+
+                if (rD3 >= 0 && rD3 < tiles.size()) {
+                    if (tiles[rD3].source != "sand_tile.png") {
+                        goto shuffleBegin;
+                    }
+                }
+                if (rD4 >= 0 && rD4 < tiles.size()) {
+                    if (tiles[rD4].source != "sand_tile.png") {
+                        goto shuffleBegin;
+                    }
+                }
+                if (lD3 >= 0 && lD3 < tiles.size()) {
+                    if (tiles[lD3].source != "sand_tile.png") {
+                        goto shuffleBegin;
+                    }
+                }
+                if (lD4 >= 0 && lD4 < tiles.size()) {
+                    if (tiles[lD4].source != "sand_tile.png") {
+                        goto shuffleBegin;
+                    }
+                }
+            }
+        }
+    }
+    for (int y = 0; y < mapNode.attribute("height").as_int(); ++y) {
+        for (int x = 0; x < mapNode.attribute("width").as_int(); ++x) {
+            int index = x + (y * mapNode.attribute("width").as_int());
+            tiles[index].dstR.x = x * tiles[index].dstR.w;
+            tiles[index].dstR.y = y * tiles[index].dstR.h;
+
+            int h = mapNode.attribute("height").as_int();
+            pugi::xml_node tilesetNode;
+            auto tilesetsIt = mapNode.children("tileset");
+            for (pugi::xml_node& tileset : tilesetsIt) {
+                int firstgid = tileset.attribute("firstgid").as_int();
+                int tileCount = tileset.attribute("tilecount").as_int();
+                int lastGid = firstgid + tileCount - 1;
+                if (tiles[index].id >= firstgid && tiles[index].id <= lastGid) {
+                    tilesetNode = tileset;
+                    break;
+                }
+            }
+            tiles[index].srcR.w = tilesetNode.attribute("tilewidth").as_int();
+            tiles[index].srcR.h = tilesetNode.attribute("tileheight").as_int();
+            tiles[index].srcR.x = (tiles[index].id - tilesetNode.attribute("firstgid").as_int()) % tilesetNode.attribute("columns").as_int() * tiles[index].srcR.w;
+            tiles[index].srcR.y = (tiles[index].id - tilesetNode.attribute("firstgid").as_int()) / tilesetNode.attribute("columns").as_int() * tiles[index].srcR.h;
+            tiles[index].source = tilesetNode.child("image").attribute("source").as_string();
+
+            if (tiles[index].id != 1) {
+                plots.push_back(Plot());
+                plots.back().r = tiles[index].dstR;
+                if (tiles[index].id == 2) {
+                    plots.back().food = Food::Apple;
+                }
+                else if (tiles[index].id == 3) {
+                    plots.back().food = Food::Banana;
+                }
+                else if (tiles[index].id == 4) {
+                    plots.back().food = Food::Pumpkin;
+                }
+                else if (tiles[index].id == 5) {
+                    plots.back().food = Food::Grape;
+                }
+                else if (tiles[index].id == 6) {
+                    plots.back().food = Food::Potato;
+                }
+                else if (tiles[index].id == 7) {
+                    plots.back().food = Food::Carrot;
+                }
+            }
+        }
     }
 }
 
@@ -1333,6 +1561,7 @@ void mainLoop()
                     energyClock.restart();
                 }
                 isMoving = true;
+                playerDirection = PlayerDirection::Left;
             }
             else if (keys[SDL_SCANCODE_D]) {
                 player.dx = 1;
@@ -1340,6 +1569,7 @@ void mainLoop()
                     energyClock.restart();
                 }
                 isMoving = true;
+                playerDirection = PlayerDirection::Right;
             }
             if (keys[SDL_SCANCODE_W]) {
                 player.dy = -1;
@@ -1347,6 +1577,7 @@ void mainLoop()
                     energyClock.restart();
                 }
                 isMoving = true;
+                playerDirection = PlayerDirection::Up;
             }
             else if (keys[SDL_SCANCODE_S]) {
                 player.dy = 1;
@@ -1354,6 +1585,7 @@ void mainLoop()
                     energyClock.restart();
                 }
                 isMoving = true;
+                playerDirection = PlayerDirection::Down;
             }
         }
         player.r.x = clamp(player.r.x, 0, windowWidth - player.r.w);
@@ -1397,7 +1629,12 @@ void mainLoop()
         SDL_SetRenderTarget(renderer, bgLayerT);
         SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
         SDL_RenderClear(renderer);
-        RenderScreen();
+        for (Tile& t : tiles) {
+            SDL_RenderCopyF(renderer, getT(renderer, t.source), &t.srcR, &t.dstR);
+        }
+        for (int i = 0; i < plots.size(); ++i) {
+            plots[i].renderPlot();
+        }
         if (shouldShowRotImage) {
             SDL_RenderCopyF(renderer, rotT, 0, &rotR);
             SDL_RenderCopyF(renderer, houseflyT, 0, &houseflyR);
@@ -1418,7 +1655,30 @@ void mainLoop()
             houseflyR.y = rotR.y + rotR.h - houseflyR.h;
         }
         SDL_RenderCopyF(renderer, houseT, 0, &houseR);
-        SDL_RenderCopyF(renderer, playerT, 0, &player.r);
+        if (playerDirection==PlayerDirection::Left) {
+        SDL_RenderCopyExF(renderer, playerT, &playerAnimationFrames[playerAnimationFrame], &player.r,0,0,SDL_FLIP_HORIZONTAL);
+        }
+        else if (playerDirection == PlayerDirection::Right) {
+        SDL_RenderCopyExF(renderer, playerT, &playerAnimationFrames[playerAnimationFrame], &player.r,0,0,SDL_FLIP_NONE);
+        }
+        else if (playerDirection == PlayerDirection::Up) {
+        SDL_RenderCopyExF(renderer, playerT, &playerAnimationFrames[playerAnimationFrame], &player.r,270,0,SDL_FLIP_NONE);
+        }
+        else if (playerDirection == PlayerDirection::Down) {
+        SDL_RenderCopyExF(renderer, playerT, &playerAnimationFrames[playerAnimationFrame], &player.r,90,0,SDL_FLIP_NONE);
+        }
+        if (isMoving) {
+            if (playerAnimationClock.getElapsedTime() > 500) {
+                ++playerAnimationFrame;
+                playerAnimationClock.restart();
+            }
+        }
+        else {
+            playerAnimationFrame = 0;
+        }
+        if (playerAnimationFrame > 7) {
+            playerAnimationFrame = 0;
+        }
         if (isCollecting) {
             SDL_RenderCopyF(renderer, collectT, 0, &collectR);
         }
@@ -1618,11 +1878,8 @@ void mainLoop()
         player.r.y += player.dy * deltaTime * PLAYER_SPEED;
         player.r.x = clamp(player.r.x, 0, windowWidth - player.r.w);
         player.r.y = clamp(player.r.y, 0, windowHeight - player.r.h);
-        if (SDL_HasIntersectionF(&player.r, &doorR)) {
-            state = State::Outside;
-        }
         std::vector<int> scoreGain;
-        for (int i = 0; i < (int)(Food::NumFood)-1; ++i) {
+        for (int i = 0; i < (int)(Food::NumFood); ++i) {
             scoreGain.push_back(random(1, 10));
         }
         for (int i = 0; i < foods.size(); ++i) {
@@ -1797,7 +2054,7 @@ int main(int argc, char* argv[])
     powerupS = Mix_LoadWAV("res/powerup.wav");
     sleepS = Mix_LoadWAV("res/sleep.wav");
     Mix_PlayMusic(josephKosmaM, 1);
-    SetPosition();
+    loadMap("res/map.tmx");
     soundBtnR.w = 48;
     soundBtnR.h = 48;
     soundBtnR.x = windowWidth - soundBtnR.w - 20;
@@ -1899,10 +2156,6 @@ int main(int argc, char* argv[])
     inventorySlotXR.y = inventorySlotR.y - inventorySlotXR.h;
     inventorySlotX2R = inventorySlotXR;
     inventorySlotX2R.x = inventorySlot2R.x - inventorySlotX2R.w / 2;
-    doorR.w = 32;
-    doorR.h = 32;
-    doorR.x = windowWidth - doorR.w - 20;
-    doorR.y = windowHeight / 2 - doorR.h / 2;
     chestR.w = 32;
     chestR.h = 32;
     chestR.x = 20;
@@ -1925,6 +2178,13 @@ int main(int argc, char* argv[])
     bgLayerT = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, windowWidth, windowHeight);
     lightLayerT = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, windowWidth, windowHeight);
     resultLayerT = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, windowWidth, windowHeight);
+    houseR.w = 64;
+    houseR.h = 64;
+    houseR.x = windowWidth / 2 - houseR.w / 2;
+    houseR.y = windowHeight / 2 - houseR.h / 2;
+    for (int i = 0; i < 8; ++i) {
+        playerAnimationFrames.push_back({ i * 32, 0, 32, 32 });
+    }
     readData();
     leafClock.restart();
     globalClock.restart();
@@ -1936,6 +2196,7 @@ int main(int argc, char* argv[])
     timeClock.restart();
     potatoClock.restart();
     pumpkinClock.restart();
+    playerAnimationClock.restart();
     HomeInit();
     for (auto& food : foods) {
         food = Food::Empty;

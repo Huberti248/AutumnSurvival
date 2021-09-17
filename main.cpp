@@ -76,6 +76,7 @@ using namespace std::chrono_literals;
 #define BROWN_COLOR 140, 56, 4, 255
 #define WARNING_COLOR 255, 0, 0, 255
 #define PART_SPEED 0.1
+#define HUNGER_DECREASE_DELAY_IN_MS 1000
 
 #define HOME_BUTTON_SELECTED \
     {                        \
@@ -145,6 +146,9 @@ SDL_Texture* currentPartT;
 SDL_Texture* doorT;
 SDL_Texture* chestT;
 SDL_Texture* windowT;
+SDL_Texture* hungerT;
+SDL_Texture* carrotSoilT;
+SDL_Texture* potatoSoilT;
 Mix_Music* josephKosmaM;
 Mix_Music* antonioVivaldiM;
 Mix_Chunk* doorS;
@@ -639,11 +643,11 @@ struct Plot {
         case Food::Banana:
             return bananaTreeT;
         case Food::Carrot:
-            return soilT;
+            return carrotSoilT;
         case Food::Grape:
             return vineT;
         case Food::Potato:
-            return soilT;
+            return potatoSoilT;
         case Food::Pumpkin:
             return pumpkinTreeT;
         default:
@@ -694,6 +698,7 @@ enum class State {
     Intro,
     Home,
     Minigame,
+    Gameover,
 };
 
 struct Shop {
@@ -759,90 +764,6 @@ enum class PlayerDirection {
     Down,
 };
 
-SDL_FRect grapeTreeR;
-SDL_FRect appleTreeR;
-SDL_FRect bananaTreeR;
-SDL_FRect carrotTreeR;
-SDL_FRect potatoTreeR;
-SDL_FRect pumpkinTreeR;
-SDL_FRect soundBtnR;
-std::vector<Entity> entities;
-Clock leafClock;
-Clock globalClock;
-Clock grapeClock;
-Clock appleClock;
-Clock bananaClock;
-Clock carrotClock;
-Clock potatoClock;
-Clock pumpkinClock;
-Clock timeClock;
-Clock tradeClock;
-Text scoreText;
-Shop shop;
-State state = State::Intro;
-Clock rotClock;
-int rotDelayInMs = ROT_INIT_DELAY_IN_MS;
-Music currentMusic = Music::JosephKosma;
-int grapeSpawnDelayInMs = GRAPE_INIT_SPAWN_DELAY_IN_MS;
-int appleSpawnDelayInMs = APPLE_INIT_SPAWN_DELAY_IN_MS;
-int bananaSpawnDelayInMs = BANANA_INIT_SPAWN_DELAY_IN_MS;
-int carrotSpawnDelayInMs = CARROT_INIT_SPAWN_DELAY_IN_MS;
-int potatoSpawnDelayInMs = POTATO_INIT_SPAWN_DELAY_IN_MS;
-int pumpkinSpawnDelayInMs = PUMPKIN_INIT_SPAWN_DELAY_IN_MS;
-bool isMuted = false;
-Intro intro;
-Text hourText;
-int hour = 7;
-SDL_FRect sunR;
-SDL_FRect energyR;
-Text energyText;
-bool shouldShowRotImage = false;
-SDL_FRect rotR;
-int maxEnergy = MAX_ENERGY_INIT;
-SDL_FRect houseflyR;
-bool houseflyGoingRight = true;
-std::vector<SDL_FRect> tradeRects;
-Player player;
-SDL_FRect houseR;
-bool isMoving = false;
-Clock energyClock;
-bool shouldGoHome = false;
-SDL_FRect collectR;
-bool isCollecting = false;
-SDL_FRect inventorySlotR;
-SDL_FRect inventorySlot2R;
-SDL_FRect inventorySlotXR;
-SDL_FRect inventorySlotX2R;
-std::array<Food, 2> foods;
-Interactable doorI;
-Interactable shopI;
-Interactable bedI;
-Interactable chestI;
-bool exitedHome = false;
-Text infoText;
-bool shouldShowInfoText;
-Text cantCollectText;
-bool canCollect = true;
-Text canSleepAndGoShopText;
-bool shouldShowWhenCanSleepAndGoShop = false;
-std::vector<Part> parts;
-SDL_FRect tile;
-SDL_FRect homeGround;
-SDL_FRect homeWall;
-SDL_FRect homeSeparator;
-SDL_FRect windowR;
-Text actionText;
-Interactable currentAction;
-int mapWidth;
-int mapHeight;
-std::vector<Tile> tiles;
-std::vector<Plot> plots;
-std::vector<SDL_Rect> playerAnimationFrames;
-int playerAnimationFrame;
-Clock playerAnimationClock;
-PlayerDirection playerDirection;
-SDL_FRect doorR;
-
 void muteMusicAndSounds()
 {
     Mix_VolumeMusic(0);
@@ -855,7 +776,7 @@ void unmuteMusicAndSounds()
     Mix_Volume(-1, 128);
 }
 
-void saveData()
+void saveData(Text scoreText, int rotDelayInMs, bool isMuted, int maxEnergy)
 {
     pugi::xml_document doc;
     pugi::xml_node rootNode = doc.append_child("root");
@@ -871,7 +792,7 @@ void saveData()
     // TODO: When adding emscripten add their saveing
 }
 
-void readData()
+void readData(Text& scoreText, int& rotDelayInMs, bool& isMuted, int& maxEnergy, Text& energyText)
 {
     pugi::xml_document doc;
     doc.load_file((prefPath + "data.xml").c_str());
@@ -896,14 +817,14 @@ float lerp(float a, float b, float t)
     return (a + t * (b - a));
 }
 
-void RenderScreen()
+void RenderScreen(std::vector<Plot> plots)
 {
     for (auto& plot : plots) {
         plot.renderPlot();
     }
 }
 
-void drawInventory()
+void drawInventory(SDL_FRect inventorySlotR, SDL_FRect inventorySlot2R, std::array<Food, 2> foods, SDL_FRect inventorySlotXR, SDL_FRect inventorySlotX2R)
 {
     SDL_SetRenderDrawColor(renderer, BROWN_COLOR);
     SDL_RenderFillRectF(renderer, &inventorySlotR);
@@ -952,7 +873,26 @@ void drawInventory()
     }
 }
 
-void RenderUI()
+void RenderUI(Text scoreText,
+    bool isMuted,
+    SDL_FRect soundBtnR,
+    Text hourText,
+    Text energyText,
+    int hour,
+    SDL_FRect sunR,
+    SDL_FRect energyR,
+    PlayerDirection playerDirection,
+    std::vector<SDL_Rect> playerAnimationFrames,
+    int playerAnimationFrame,
+    Player player,
+    bool isMoving,
+    Clock& playerAnimationClock,
+    Text hungerText,
+    SDL_FRect inventorySlotR,
+    SDL_FRect inventorySlot2R,
+    std::array<Food, 2> foods,
+    SDL_FRect inventorySlotXR,
+    SDL_FRect inventorySlotX2R)
 {
     scoreText.draw(renderer);
     if (isMuted) {
@@ -970,7 +910,7 @@ void RenderUI()
     }
     energyText.draw(renderer);
     SDL_RenderCopyF(renderer, energyT, 0, &energyR);
-    drawInventory();
+    drawInventory(inventorySlotR, inventorySlot2R, foods, inventorySlotXR, inventorySlotX2R);
     if (playerDirection == PlayerDirection::Left) {
         SDL_RenderCopyExF(renderer, playerT, &playerAnimationFrames[playerAnimationFrame], &player.r, 0, 0, SDL_FLIP_HORIZONTAL);
     }
@@ -995,6 +935,13 @@ void RenderUI()
     if (playerAnimationFrame > 7) {
         playerAnimationFrame = 0;
     }
+    hungerText.draw(renderer);
+    SDL_FRect hungerR;
+    hungerR.w = 32;
+    hungerR.h = 32;
+    hungerR.x = hungerText.dstR.x - hungerR.w;
+    hungerR.y = hungerText.dstR.y + hungerText.dstR.h / 2 - hungerR.h / 2;
+    SDL_RenderCopyF(renderer, hungerT, 0, &hungerR);
 }
 
 int ClosestNumber(int total, int size)
@@ -1010,7 +957,7 @@ int ClosestNumber(int total, int size)
     return nextClosest;
 }
 
-void HomeInit()
+void HomeInit(SDL_FRect& tile, SDL_FRect& homeGround, SDL_FRect& homeWall, SDL_FRect& homeSeparator, SDL_FRect& windowR, Interactable& doorI, Interactable& shopI, Player& player, Interactable& bedI, Interactable& chestI, Text& actionText)
 {
     tile.w = 32;
     tile.h = 32;
@@ -1060,7 +1007,41 @@ void HomeInit()
     actionText.dstR.y = windowHeight - actionText.dstR.h - SCREEN_PADDING;
 }
 
-void RenderHome()
+void RenderHome(SDL_FRect homeGround,
+    SDL_FRect tile,
+    SDL_FRect homeWall,
+    SDL_FRect homeSeparator,
+    int hour,
+    SDL_FRect windowR,
+    Interactable& bedI,
+    Interactable& doorI,
+    Interactable& shopI,
+    Interactable& chestI,
+    Text& actionText,
+    Interactable& currentAction,
+    bool& shouldShowInfoText,
+    Text& infoText,
+    bool& shouldShowWhenCanSleepAndGoShop,
+    Text& canSleepAndGoShopText,
+    Text scoreText,
+    bool isMuted,
+    SDL_FRect soundBtnR,
+    Text hourText,
+    Text energyText,
+    SDL_FRect sunR,
+    SDL_FRect energyR,
+    PlayerDirection playerDirection,
+    std::vector<SDL_Rect> playerAnimationFrames,
+    int playerAnimationFrame,
+    Player player,
+    bool isMoving,
+    Clock& playerAnimationClock,
+    Text hungerText,
+    SDL_FRect inventorySlotR,
+    SDL_FRect inventorySlot2R,
+    std::array<Food, 2> foods,
+    SDL_FRect inventorySlotXR,
+    SDL_FRect inventorySlotX2R)
 {
     // Create home map
     SDL_SetRenderDrawColor(renderer, 209, 180, 140, SDL_ALPHA_OPAQUE);
@@ -1130,7 +1111,7 @@ void RenderHome()
     actionText.dstR.x = windowWidth / 2.0f - actionText.dstR.w / 2.0f;
     actionText.draw(renderer);
 
-    RenderUI();
+    RenderUI(scoreText, isMuted, soundBtnR, hourText, energyText, hour, sunR, energyR, playerDirection, playerAnimationFrames, playerAnimationFrame, player, isMoving, playerAnimationClock, hungerText, inventorySlotR, inventorySlot2R, foods, inventorySlotXR, inventorySlotX2R);
     if (shouldShowInfoText) {
         infoText.draw(renderer);
     }
@@ -1139,7 +1120,7 @@ void RenderHome()
     }
 }
 
-void moveTimeByOneHour()
+void moveTimeByOneHour(Clock& timeClock, int& hour, Text& hourText)
 {
     if (timeClock.getElapsedTime() > 1000) {
         ++hour;
@@ -1156,7 +1137,7 @@ void moveTimeByOneHour()
     }
 }
 
-void loadMap(std::string path)
+void loadMap(std::string path, int& mapWidth, int& mapHeight, std::vector<Tile>& tiles, std::vector<Plot>& plots)
 {
     pugi::xml_document doc;
     std::size_t length;
@@ -1209,7 +1190,7 @@ void loadMap(std::string path)
             }
         }
     }
-    auto rd = std::random_device{};
+    std::random_device rd{};
     auto rng = std::default_random_engine{ rd() };
 shuffleBegin:
     plots.clear();
@@ -1293,653 +1274,6 @@ shuffleBegin:
     }
 }
 
-void mainLoop()
-{
-    float deltaTime = globalClock.restart();
-    SDL_FRect windowR;
-    windowR.w = windowWidth;
-    windowR.h = windowHeight;
-    windowR.x = 0;
-    windowR.y = 0;
-    if (!Mix_PlayingMusic()) {
-        if (currentMusic == Music::JosephKosma) {
-            currentMusic = Music::AntonioVivaldi;
-            Mix_PlayMusic(antonioVivaldiM, 1);
-        }
-        else if (currentMusic == Music::AntonioVivaldi) {
-            currentMusic = Music::JosephKosma;
-            Mix_PlayMusic(josephKosmaM, 1);
-        }
-    }
-    if (state == State::Intro) {
-        SDL_Event event;
-        while (SDL_PollEvent(&event)) {
-            if (event.type == SDL_QUIT || event.type == SDL_KEYDOWN && event.key.keysym.scancode == SDL_SCANCODE_ESCAPE) {
-                running = false;
-                // TODO: On mobile remember to use eventWatch function (it doesn't reach this code when terminating)
-            }
-            if (event.type == SDL_WINDOWEVENT && event.window.event == SDL_WINDOWEVENT_RESIZED) {
-                SDL_RenderSetScale(renderer, event.window.data1 / (float)windowWidth, event.window.data2 / (float)windowHeight);
-            }
-            if (event.type == SDL_KEYDOWN) {
-                keys[event.key.keysym.scancode] = true;
-            }
-            if (event.type == SDL_KEYUP) {
-                keys[event.key.keysym.scancode] = false;
-            }
-            if (event.type == SDL_MOUSEBUTTONDOWN) {
-                buttons[event.button.button] = true;
-            }
-            if (event.type == SDL_MOUSEBUTTONUP) {
-                buttons[event.button.button] = false;
-            }
-            if (event.type == SDL_MOUSEMOTION) {
-                float scaleX, scaleY;
-                SDL_RenderGetScale(renderer, &scaleX, &scaleY);
-                mousePos.x = event.motion.x / scaleX;
-                mousePos.y = event.motion.y / scaleY;
-                realMousePos.x = event.motion.x;
-                realMousePos.y = event.motion.y;
-            }
-        }
-        if (intro.introClock.getElapsedTime() > 1000) {
-            state = State::Outside;
-        }
-        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
-        SDL_RenderClear(renderer);
-        SDL_RenderCopyExF(renderer, leafT, 0, &intro.leafR, intro.leafAngle, 0, SDL_FLIP_NONE);
-        if (intro.leafMotion == Motion::Right) {
-            ++intro.leafAngle;
-            if (intro.leafAngle == 75) {
-                intro.leafMotion = Motion::Left;
-            }
-        }
-        else if (intro.leafMotion == Motion::Left) {
-            --intro.leafAngle;
-            if (intro.leafAngle == -75) {
-                intro.leafMotion = Motion::Right;
-            }
-        }
-        SDL_RenderPresent(renderer);
-        SDL_Delay(8);
-    }
-    else if (state == State::Outside) {
-        SDL_Event event;
-        while (SDL_PollEvent(&event)) {
-            if (event.type == SDL_QUIT || event.type == SDL_KEYDOWN && event.key.keysym.scancode == SDL_SCANCODE_ESCAPE) {
-                running = false;
-                // TODO: On mobile remember to use eventWatch function (it doesn't reach this code when terminating)
-            }
-            if (event.type == SDL_WINDOWEVENT && event.window.event == SDL_WINDOWEVENT_RESIZED) {
-                SDL_RenderSetScale(renderer, event.window.data1 / (float)windowWidth, event.window.data2 / (float)windowHeight);
-            }
-            if (event.type == SDL_KEYDOWN) {
-                keys[event.key.keysym.scancode] = true;
-                if (event.key.keysym.scancode == SDL_SCANCODE_SPACE) {
-                    if (hour >= 7 && hour <= 17) {
-                        canCollect = true;
-                        if (foods[0] == Food::Empty || foods[1] == Food::Empty) {
-                            int index = foods[0] == Food::Empty ? 0 : 1;
-                            for (auto& plot : plots) {
-                                if (plot.isIntersecting(player.r)) {
-                                    state = State::Minigame;
-                                    if (plot.food == Food::Apple) {
-                                        currentPartT = appleT;
-                                    }
-                                    else if (plot.food == Food::Banana) {
-                                        currentPartT = bananaT;
-                                    }
-                                    else if (plot.food == Food::Carrot) {
-                                        currentPartT = carrotT;
-                                    }
-                                    else if (plot.food == Food::Grape) {
-                                        currentPartT = grapeT;
-                                    }
-                                    else if (plot.food == Food::Potato) {
-                                        currentPartT = potatoT;
-                                    }
-                                    else if (plot.food == Food::Pumpkin) {
-                                        currentPartT = pumpkinT;
-                                    }
-                                    for (int i = 0; i < 10; ++i) {
-                                        parts.push_back(Part());
-                                        parts.back().dstR.w = 32;
-                                        parts.back().dstR.h = 32;
-                                        parts.back().dstR.x = random(0, windowWidth - parts.back().dstR.w);
-                                        parts.back().dstR.y = -parts.back().dstR.h;
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    else {
-                        canCollect = false;
-                    }
-                }
-            }
-            if (event.type == SDL_KEYUP) {
-                keys[event.key.keysym.scancode] = false;
-            }
-            if (event.type == SDL_MOUSEBUTTONDOWN) {
-                buttons[event.button.button] = true;
-                if (SDL_PointInFRect(&mousePos, &soundBtnR)) {
-                    isMuted = !isMuted;
-                    if (isMuted) {
-                        muteMusicAndSounds();
-                    }
-                    else {
-                        unmuteMusicAndSounds();
-                    }
-                }
-                if (SDL_PointInFRect(&mousePos, &inventorySlotXR)) {
-                    foods[0] = Food::Empty;
-                }
-                if (SDL_PointInFRect(&mousePos, &inventorySlotX2R)) {
-                    foods[1] = Food::Empty;
-                }
-            }
-            if (event.type == SDL_MOUSEBUTTONUP) {
-                buttons[event.button.button] = false;
-            }
-            if (event.type == SDL_MOUSEMOTION) {
-                float scaleX, scaleY;
-                SDL_RenderGetScale(renderer, &scaleX, &scaleY);
-                mousePos.x = event.motion.x / scaleX;
-                mousePos.y = event.motion.y / scaleY;
-                realMousePos.x = event.motion.x;
-                realMousePos.y = event.motion.y;
-            }
-        }
-        for (int i = 0; i < entities.size(); ++i) {
-            if (entities[i].direction == Direction::Right) {
-                entities[i].r.x += 0.01 * deltaTime;
-            }
-            else if (entities[i].direction == Direction::Left) {
-                entities[i].r.x += -0.01 * deltaTime;
-            }
-            entities[i].r.y = std::pow(entities[i].r.x, 2) / 28;
-        }
-        if (rotClock.getElapsedTime() > rotDelayInMs) {
-            if (std::stoi(scoreText.text) > 0) {
-                scoreText.setText(renderer, robotoF, std::stoi(scoreText.text) - 1);
-            }
-            rotClock.restart();
-        }
-        shouldShowRotImage = rotClock.getElapsedTime() + 1000 > rotDelayInMs && std::stoi(scoreText.text) > 0;
-        moveTimeByOneHour();
-        if (tradeClock.getElapsedTime() > 1000) // TODO: Set it to 20000
-        {
-            tradeRects.push_back(SDL_FRect());
-            tradeRects.back().w = windowWidth;
-            tradeRects.back().h = windowHeight;
-            tradeRects.back().x = 0;
-            tradeRects.back().y = -windowHeight + 1;
-            tradeClock.restart();
-        }
-        for (int i = 0; i < tradeRects.size(); ++i) {
-            tradeRects[i].y += deltaTime;
-            if (!SDL_HasIntersectionF(&tradeRects[i], &windowR)) {
-                tradeRects.erase(tradeRects.begin() + i--);
-                // TODO: Mix prize for each vegetable/fruit (save them to file also)
-            }
-        }
-        player.dx = 0;
-        player.dy = 0;
-        if (shouldGoHome) {
-            if (player.r.x + player.r.w < houseR.x) {
-                player.r.x += PLAYER_SPEED * deltaTime;
-            }
-            else if (player.r.x > houseR.x + houseR.w) {
-                player.r.x += -PLAYER_SPEED * deltaTime;
-            }
-            if (player.r.y + player.r.h < houseR.y) {
-                player.r.y += PLAYER_SPEED * deltaTime;
-            }
-            else if (player.r.y > houseR.y + houseR.h) {
-                player.r.y += -PLAYER_SPEED * deltaTime;
-            }
-        }
-        else {
-            if (keys[SDL_SCANCODE_A]) {
-                player.dx = -1;
-                if (!isMoving) {
-                    energyClock.restart();
-                }
-                isMoving = true;
-                playerDirection = PlayerDirection::Left;
-            }
-            else if (keys[SDL_SCANCODE_D]) {
-                player.dx = 1;
-                if (!isMoving) {
-                    energyClock.restart();
-                }
-                isMoving = true;
-                playerDirection = PlayerDirection::Right;
-            }
-            if (keys[SDL_SCANCODE_W]) {
-                player.dy = -1;
-                if (!isMoving) {
-                    energyClock.restart();
-                }
-                isMoving = true;
-                playerDirection = PlayerDirection::Up;
-            }
-            else if (keys[SDL_SCANCODE_S]) {
-                player.dy = 1;
-                if (!isMoving) {
-                    energyClock.restart();
-                }
-                isMoving = true;
-                playerDirection = PlayerDirection::Down;
-            }
-        }
-        player.r.x = clamp(player.r.x, 0, windowWidth - player.r.w);
-        player.r.y = clamp(player.r.y, 0, windowHeight - player.r.h);
-        if (!keys[SDL_SCANCODE_A] && !keys[SDL_SCANCODE_D]
-            && !keys[SDL_SCANCODE_W] && !keys[SDL_SCANCODE_S]) {
-            isMoving = false;
-        }
-        if (isMoving) {
-            if (energyClock.getElapsedTime() > 1000) {
-                if (std::stoi(energyText.text) != 0) {
-                    energyText.setText(renderer, robotoF, std::stoi(energyText.text) - 1);
-                }
-                if (energyText.text == "0") {
-                    shouldGoHome = true;
-                }
-                energyClock.restart();
-            }
-        }
-        player.r.x += player.dx * deltaTime * PLAYER_SPEED;
-        player.r.y += player.dy * deltaTime * PLAYER_SPEED;
-        if (SDL_HasIntersectionF(&houseR, &player.r)) {
-            if (!exitedHome) {
-                exitedHome = true;
-                state = State::Home;
-                Mix_PlayChannel(-1, doorS, 0);
-            }
-        }
-        if (exitedHome) {
-            exitedHome = false;
-        }
-        isCollecting = false;
-        for (auto& plot : plots) {
-            if (plot.isIntersecting(player.r)) {
-                isCollecting = true;
-                break;
-            }
-        }
-        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
-        SDL_RenderClear(renderer);
-        SDL_SetRenderTarget(renderer, bgLayerT);
-        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
-        SDL_RenderClear(renderer);
-        for (Tile& t : tiles) {
-            SDL_RenderCopyF(renderer, getT(renderer, t.source), &t.srcR, &t.dstR);
-        }
-        for (int i = 0; i < plots.size(); ++i) {
-            plots[i].renderPlot();
-        }
-        if (shouldShowRotImage) {
-            SDL_RenderCopyF(renderer, rotT, 0, &rotR);
-            SDL_RenderCopyF(renderer, houseflyT, 0, &houseflyR);
-            if (houseflyGoingRight) {
-                houseflyR.x += 0.1 * deltaTime;
-                if (houseflyR.x + houseflyR.w >= rotR.x + rotR.w) {
-                    houseflyGoingRight = false;
-                    houseflyR.y -= 20;
-                }
-            }
-            else {
-                houseflyR.x -= 0.05 * deltaTime;
-            }
-        }
-        else {
-            houseflyR.x = rotR.x;
-            houseflyGoingRight = true;
-            houseflyR.y = rotR.y + rotR.h - houseflyR.h;
-        }
-        SDL_RenderCopyF(renderer, houseT, 0, &houseR);
-        if (isCollecting) {
-            SDL_RenderCopyF(renderer, collectT, 0, &collectR);
-        }
-        SDL_SetRenderTarget(renderer, 0);
-
-        SDL_SetRenderTarget(renderer, lightLayerT);
-        SDL_SetTextureBlendMode(lightLayerT, SDL_BLENDMODE_MOD);
-        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
-        SDL_RenderClear(renderer);
-        SDL_FRect spotR = player.r;
-        spotR.x -= 200;
-        spotR.y -= 200;
-        spotR.w += 400;
-        spotR.h += 400;
-        if (hour >= 7 && hour <= 17) {
-            spotR.w = windowWidth + 400;
-            spotR.h = windowHeight + 400;
-            spotR.x = -200;
-            spotR.y = -200;
-        }
-        SDL_RenderCopyF(renderer, lightT, 0, &spotR);
-        SDL_SetRenderTarget(renderer, 0);
-
-        SDL_SetRenderTarget(renderer, resultLayerT);
-        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
-        SDL_RenderClear(renderer);
-        SDL_SetTextureBlendMode(resultLayerT, SDL_BLENDMODE_BLEND);
-        SDL_RenderCopy(renderer, bgLayerT, 0, 0);
-        SDL_RenderCopy(renderer, lightLayerT, 0, 0);
-
-        SDL_SetRenderTarget(renderer, 0);
-        SDL_RenderCopy(renderer, resultLayerT, 0, 0);
-        drawInventory();
-        RenderUI();
-        if (!canCollect) {
-            cantCollectText.draw(renderer);
-        }
-        SDL_RenderPresent(renderer);
-    }
-    else if (state == State::Shop) {
-        SDL_Event event;
-        while (SDL_PollEvent(&event)) {
-            if (event.type == SDL_QUIT || event.type == SDL_KEYDOWN && event.key.keysym.scancode == SDL_SCANCODE_ESCAPE) {
-                running = false;
-                // TODO: On mobile remember to use eventWatch function (it doesn't reach this code when terminating)
-            }
-            if (event.type == SDL_WINDOWEVENT && event.window.event == SDL_WINDOWEVENT_RESIZED) {
-                SDL_RenderSetScale(renderer, event.window.data1 / (float)windowWidth, event.window.data2 / (float)windowHeight);
-            }
-            if (event.type == SDL_KEYDOWN) {
-                keys[event.key.keysym.scancode] = true;
-            }
-            if (event.type == SDL_KEYUP) {
-                keys[event.key.keysym.scancode] = false;
-            }
-            if (event.type == SDL_MOUSEBUTTONDOWN) {
-                buttons[event.button.button] = true;
-                if (SDL_PointInFRect(&mousePos, &shop.backArrowR)) {
-                    state = State::Home;
-                }
-                if (SDL_PointInFRect(&mousePos, &shop.lessRotBuyR)) {
-                    if (std::stoi(scoreText.text) >= std::stoi(shop.lessRotPriceText.text)) {
-                        scoreText.setText(renderer, robotoF, std::stoi(scoreText.text) - std::stoi(shop.lessRotPriceText.text));
-                        rotDelayInMs += 1000;
-                        Mix_PlayChannel(-1, powerupS, 0);
-                    }
-                }
-                if (SDL_PointInFRect(&mousePos, &shop.moreEnergyBuyR)) {
-                    if (std::stoi(scoreText.text) >= std::stoi(shop.moreEnergyPriceText.text)) {
-                        scoreText.setText(renderer, robotoF, std::stoi(scoreText.text) - std::stoi(shop.moreEnergyPriceText.text));
-                        ++maxEnergy;
-                        Mix_PlayChannel(-1, powerupS, 0);
-                    }
-                }
-            }
-            if (event.type == SDL_MOUSEBUTTONUP) {
-                buttons[event.button.button] = false;
-            }
-            if (event.type == SDL_MOUSEMOTION) {
-                float scaleX, scaleY;
-                SDL_RenderGetScale(renderer, &scaleX, &scaleY);
-                mousePos.x = event.motion.x / scaleX;
-                mousePos.y = event.motion.y / scaleY;
-                realMousePos.x = event.motion.x;
-                realMousePos.y = event.motion.y;
-            }
-        }
-        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
-        SDL_RenderClear(renderer);
-        SDL_RenderCopyF(renderer, leafWithSprayerT, 0, &shop.lessRotR);
-        shop.lessRotText.draw(renderer);
-        shop.lessRotPriceText.draw(renderer);
-        SDL_RenderCopyF(renderer, buyT, 0, &shop.lessRotBuyR);
-        SDL_RenderCopyF(renderer, moreEnergyT, 0, &shop.moreEnergyR);
-        shop.moreEnergyText.draw(renderer);
-        shop.moreEnergyPriceText.draw(renderer);
-        SDL_RenderCopyF(renderer, buyT, 0, &shop.moreEnergyBuyR);
-        SDL_RenderCopyF(renderer, backArrowT, 0, &shop.backArrowR);
-        SDL_RenderPresent(renderer);
-    }
-    else if (state == State::Home) {
-        SDL_Event event;
-        while (SDL_PollEvent(&event)) {
-            if (event.type == SDL_QUIT || event.type == SDL_KEYDOWN && event.key.keysym.scancode == SDL_SCANCODE_ESCAPE) {
-                running = false;
-                // TODO: On mobile remember to use eventWatch function (it doesn't reach this code when terminating)
-            }
-            if (event.type == SDL_WINDOWEVENT && event.window.event == SDL_WINDOWEVENT_RESIZED) {
-                SDL_RenderSetScale(renderer, event.window.data1 / (float)windowWidth, event.window.data2 / (float)windowHeight);
-            }
-            if (event.type == SDL_KEYDOWN) {
-                keys[event.key.keysym.scancode] = true;
-                shouldShowWhenCanSleepAndGoShop = false;
-                shouldShowInfoText = false;
-                if (event.key.keysym.scancode == SDL_SCANCODE_SPACE) {
-                    if (SDL_HasIntersectionF(&player.r, &shopI.dstR)) {
-                        if (hour >= 0 && hour < 7 || hour > 17) {
-                            state = State::Shop;
-                            shouldShowWhenCanSleepAndGoShop = false;
-                            Mix_PlayChannel(-1, doorS, 0);
-                        }
-                        else {
-                            shouldShowWhenCanSleepAndGoShop = true;
-                        }
-                    }
-                    else if (SDL_HasIntersectionF(&player.r, &doorI.dstR)) {
-                        if (!shouldGoHome) {
-                            state = State::Outside;
-                            player.r.x = houseR.x + houseR.w + 5;
-                            player.r.y = houseR.y + houseR.h / 2 - player.r.h / 2;
-                            canCollect = true;
-                            shouldShowWhenCanSleepAndGoShop = false;
-                            Mix_PlayChannel(-1, doorS, 0);
-                        }
-                        else {
-                            shouldShowInfoText = true;
-                        }
-                    }
-                    else if (SDL_HasIntersectionF(&player.r, &bedI.dstR)) {
-                        if (hour >= 0 && hour < 7 || hour > 17) {
-                            shouldShowWhenCanSleepAndGoShop = false;
-                            hour = 7;
-                            hourText.setText(renderer, robotoF, std::to_string(hour) + "am");
-                            energyText.setText(renderer, robotoF, maxEnergy);
-                            shouldGoHome = false;
-                            shouldShowInfoText = false;
-                            Mix_PlayChannel(-1, sleepS, 0);
-                        }
-                        else {
-                            shouldShowWhenCanSleepAndGoShop = true;
-                        }
-                    }
-                    else if (SDL_HasIntersectionF(&player.r, &bedI.dstR)) {
-                        // TODO: Add Inventory.
-                    }
-                }
-
-                if (SDL_HasIntersectionF(&player.r, &shopI.dstR)) {
-                    currentAction.setActionText(shopI.actionText);
-                }
-                else if (SDL_HasIntersectionF(&player.r, &doorI.dstR)) {
-                    currentAction.setActionText(doorI.actionText);
-                }
-                else if (SDL_HasIntersectionF(&player.r, &bedI.dstR)) {
-                    currentAction.setActionText(bedI.actionText);
-                }
-                else if (SDL_HasIntersectionF(&player.r, &chestI.dstR)) {
-                    currentAction.setActionText(chestI.actionText);
-                }
-                else {
-                    currentAction.setActionText("");
-                }
-            }
-            if (event.type == SDL_KEYUP) {
-                keys[event.key.keysym.scancode] = false;
-            }
-            if (event.type == SDL_MOUSEBUTTONDOWN) {
-                buttons[event.button.button] = true;
-
-                if (SDL_PointInFRect(&mousePos, &soundBtnR)) {
-                    isMuted = !isMuted;
-                    if (isMuted) {
-                        muteMusicAndSounds();
-                    }
-                    else {
-                        unmuteMusicAndSounds();
-                    }
-                }
-            }
-            if (event.type == SDL_MOUSEBUTTONUP) {
-                buttons[event.button.button] = false;
-            }
-            if (event.type == SDL_MOUSEMOTION) {
-                float scaleX, scaleY;
-                SDL_RenderGetScale(renderer, &scaleX, &scaleY);
-                mousePos.x = event.motion.x / scaleX;
-                mousePos.y = event.motion.y / scaleY;
-                realMousePos.x = event.motion.x;
-                realMousePos.y = event.motion.y;
-            }
-        }
-        player.dx = 0;
-        player.dy = 0;
-
-        if (keys[SDL_SCANCODE_A]) {
-            player.dx = -1;
-            playerDirection = PlayerDirection::Left;
-        }
-        else if (keys[SDL_SCANCODE_D]) {
-            player.dx = 1;
-            playerDirection = PlayerDirection::Right;
-        }
-        if (keys[SDL_SCANCODE_W]) {
-            player.dy = -1;
-            playerDirection = PlayerDirection::Up;
-        }
-        else if (keys[SDL_SCANCODE_S]) {
-            player.dy = 1;
-            playerDirection = PlayerDirection::Down;
-        }
-        player.r.x += player.dx * deltaTime * PLAYER_SPEED;
-        player.r.y += player.dy * deltaTime * PLAYER_SPEED;
-        player.r.x = clamp(player.r.x, homeGround.x - 20, homeGround.x + homeGround.w - player.r.w + 20);
-        player.r.y = clamp(player.r.y, homeGround.y + 10, homeGround.y + homeGround.h - player.r.h);
-        if (SDL_HasIntersectionF(&player.r, &doorR)) {
-            state = State::Outside;
-        }
-        std::vector<int> scoreGain;
-        for (int i = 0; i < (int)(Food::NumFood); ++i) {
-            scoreGain.push_back(random(1, 10));
-        }
-        for (int i = 0; i < foods.size(); ++i) {
-            if (foods[i] == Food::Apple) {
-                foods[i] = Food::Empty;
-                scoreText.setText(renderer, robotoF, std::stoi(scoreText.text) + scoreGain[(int)(Food::Apple)]);
-            }
-            else if (foods[i] == Food::Banana) {
-                foods[i] = Food::Empty;
-                scoreText.setText(renderer, robotoF, std::stoi(scoreText.text) + +scoreGain[(int)(Food::Banana)]);
-            }
-            else if (foods[i] == Food::Carrot) {
-                foods[i] = Food::Empty;
-                scoreText.setText(renderer, robotoF, std::stoi(scoreText.text) + +scoreGain[(int)(Food::Carrot)]);
-            }
-            else if (foods[i] == Food::Grape) {
-                foods[i] = Food::Empty;
-                scoreText.setText(renderer, robotoF, std::stoi(scoreText.text) + +scoreGain[(int)(Food::Grape)]);
-            }
-            else if (foods[i] == Food::Potato) {
-                foods[i] = Food::Empty;
-                scoreText.setText(renderer, robotoF, std::stoi(scoreText.text) + +scoreGain[(int)(Food::Potato)]);
-            }
-            else if (foods[i] == Food::Pumpkin) {
-                foods[i] = Food::Empty;
-                scoreText.setText(renderer, robotoF, std::stoi(scoreText.text) + +scoreGain[(int)(Food::Pumpkin)]);
-            }
-        }
-        moveTimeByOneHour();
-        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
-        SDL_RenderClear(renderer);
-        RenderHome();
-        SDL_RenderPresent(renderer);
-    }
-    else if (state == State::Minigame) {
-        SDL_Event event;
-        while (SDL_PollEvent(&event)) {
-            if (event.type == SDL_QUIT || event.type == SDL_KEYDOWN && event.key.keysym.scancode == SDL_SCANCODE_ESCAPE) {
-                running = false;
-                // TODO: On mobile remember to use eventWatch function (it doesn't reach this code when terminating)
-            }
-            if (event.type == SDL_WINDOWEVENT && event.window.event == SDL_WINDOWEVENT_RESIZED) {
-                SDL_RenderSetScale(renderer, event.window.data1 / (float)windowWidth, event.window.data2 / (float)windowHeight);
-            }
-            if (event.type == SDL_KEYDOWN) {
-                keys[event.key.keysym.scancode] = true;
-            }
-            if (event.type == SDL_KEYUP) {
-                keys[event.key.keysym.scancode] = false;
-            }
-            if (event.type == SDL_MOUSEBUTTONDOWN) {
-                buttons[event.button.button] = true;
-                for (int i = 0; i < parts.size(); ++i) {
-                    if (SDL_PointInFRect(&mousePos, &parts[i].dstR)) {
-                        parts.erase(parts.begin() + i--);
-                        if (parts.empty()) {
-                            state = State::Outside;
-                            int index = foods[0] == Food::Empty ? 0 : 1;
-                            if (currentPartT == appleT) {
-                                foods[index] = Food::Apple;
-                            }
-                            else if (currentPartT == bananaT) {
-                                foods[index] = Food::Banana;
-                            }
-                            else if (currentPartT == grapeT) {
-                                foods[index] = Food::Grape;
-                            }
-                            else if (currentPartT == carrotT) {
-                                foods[index] = Food::Carrot;
-                            }
-                            else if (currentPartT == potatoT) {
-                                foods[index] = Food::Potato;
-                            }
-                            else if (currentPartT == pumpkinT) {
-                                foods[index] = Food::Pumpkin;
-                            }
-                        }
-                    }
-                }
-            }
-            if (event.type == SDL_MOUSEBUTTONUP) {
-                buttons[event.button.button] = false;
-            }
-            if (event.type == SDL_MOUSEMOTION) {
-                float scaleX, scaleY;
-                SDL_RenderGetScale(renderer, &scaleX, &scaleY);
-                mousePos.x = event.motion.x / scaleX;
-                mousePos.y = event.motion.y / scaleY;
-                realMousePos.x = event.motion.x;
-                realMousePos.y = event.motion.y;
-            }
-        }
-        for (int i = 0; i < parts.size(); ++i) {
-            parts[i].dstR.y += PART_SPEED * deltaTime;
-        }
-        for (int i = 0; i < parts.size(); ++i) {
-            if (parts[i].dstR.y + parts[i].dstR.h > windowHeight) {
-                state = State::Outside;
-                parts.clear();
-            }
-        }
-        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
-        SDL_RenderClear(renderer);
-        for (int i = 0; i < parts.size(); ++i) {
-            SDL_RenderCopyF(renderer, currentPartT, 0, &parts[i].dstR);
-        }
-        SDL_RenderPresent(renderer);
-    }
-    saveData();
-}
-
 int main(int argc, char* argv[])
 {
     std::srand(std::time(0));
@@ -1958,6 +1292,7 @@ int main(int argc, char* argv[])
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
     SDL_AddEventWatch(eventWatch, 0);
     prefPath = SDL_GetPrefPath("NextCodeApps", "AutumnLeafCollector");
+gameBegin:
     leavesT = IMG_LoadTexture(renderer, "res/leaves.png");
     treeT = IMG_LoadTexture(renderer, "res/tree.png");
     tree1T = IMG_LoadTexture(renderer, "res/tree1.png");
@@ -1999,6 +1334,9 @@ int main(int argc, char* argv[])
     doorT = IMG_LoadTexture(renderer, "res/door.png");
     chestT = IMG_LoadTexture(renderer, "res/chest.png");
     windowT = IMG_LoadTexture(renderer, "res/window.png");
+    hungerT = IMG_LoadTexture(renderer, "res/hunger.png");
+    carrotSoilT = IMG_LoadTexture(renderer, "res/carrotSoil.png");
+    potatoSoilT = IMG_LoadTexture(renderer, "res/potatoSoil.png");
     josephKosmaM = Mix_LoadMUS("res/autumnLeavesJosephKosma.mp3");
     antonioVivaldiM = Mix_LoadMUS("res/jesienAntonioVivaldi.mp3");
     doorS = Mix_LoadWAV("res/door.wav");
@@ -2006,7 +1344,96 @@ int main(int argc, char* argv[])
     powerupS = Mix_LoadWAV("res/powerup.wav");
     sleepS = Mix_LoadWAV("res/sleep.wav");
     Mix_PlayMusic(josephKosmaM, 1);
-    loadMap("res/map.tmx");
+
+    SDL_FRect grapeTreeR{};
+    SDL_FRect appleTreeR{};
+    SDL_FRect bananaTreeR{};
+    SDL_FRect carrotTreeR{};
+    SDL_FRect potatoTreeR{};
+    SDL_FRect pumpkinTreeR{};
+    SDL_FRect soundBtnR{};
+    std::vector<Entity> entities;
+    Clock leafClock;
+    Clock globalClock;
+    Clock grapeClock;
+    Clock appleClock;
+    Clock bananaClock;
+    Clock carrotClock;
+    Clock potatoClock;
+    Clock pumpkinClock;
+    Clock timeClock;
+    Clock tradeClock;
+    Text scoreText;
+    Shop shop;
+    State state = State::Intro;
+    Clock rotClock;
+    int rotDelayInMs = ROT_INIT_DELAY_IN_MS;
+    Music currentMusic = Music::JosephKosma;
+    int grapeSpawnDelayInMs = GRAPE_INIT_SPAWN_DELAY_IN_MS;
+    int appleSpawnDelayInMs = APPLE_INIT_SPAWN_DELAY_IN_MS;
+    int bananaSpawnDelayInMs = BANANA_INIT_SPAWN_DELAY_IN_MS;
+    int carrotSpawnDelayInMs = CARROT_INIT_SPAWN_DELAY_IN_MS;
+    int potatoSpawnDelayInMs = POTATO_INIT_SPAWN_DELAY_IN_MS;
+    int pumpkinSpawnDelayInMs = PUMPKIN_INIT_SPAWN_DELAY_IN_MS;
+    bool isMuted = false;
+    Intro intro;
+    Text hourText;
+    int hour = 7;
+    SDL_FRect sunR{};
+    SDL_FRect energyR{};
+    Text energyText;
+    bool shouldShowRotImage = false;
+    SDL_FRect rotR{};
+    int maxEnergy = MAX_ENERGY_INIT;
+    SDL_FRect houseflyR{};
+    bool houseflyGoingRight = true;
+    std::vector<SDL_FRect> tradeRects;
+    Player player{};
+    SDL_FRect houseR{};
+    bool isMoving = false;
+    Clock energyClock;
+    bool shouldGoHome = false;
+    SDL_FRect collectR{};
+    bool isCollecting = false;
+    SDL_FRect inventorySlotR{};
+    SDL_FRect inventorySlot2R{};
+    SDL_FRect inventorySlotXR{};
+    SDL_FRect inventorySlotX2R{};
+    std::array<Food, 2> foods;
+    Interactable doorI{};
+    Interactable shopI{};
+    Interactable bedI{};
+    Interactable chestI{};
+    bool exitedHome = false;
+    Text infoText;
+    bool shouldShowInfoText = false;
+    Text cantCollectText;
+    bool canCollect = true;
+    Text canSleepAndGoShopText;
+    bool shouldShowWhenCanSleepAndGoShop = false;
+    std::vector<Part> parts;
+    SDL_FRect tile{};
+    SDL_FRect homeGround{};
+    SDL_FRect homeWall{};
+    SDL_FRect homeSeparator{};
+    SDL_FRect windowR{};
+    Text actionText;
+    Interactable currentAction{};
+    int mapWidth = 0;
+    int mapHeight = 0;
+    std::vector<Tile> tiles;
+    std::vector<Plot> plots;
+    std::vector<SDL_Rect> playerAnimationFrames;
+    int playerAnimationFrame = 0;
+    Clock playerAnimationClock;
+    PlayerDirection playerDirection = PlayerDirection::Right;
+    SDL_FRect doorR{};
+    Text hungerText;
+    Clock hungerClock;
+    Text playAgainText;
+    Text gameOverText;
+
+    loadMap("res/map.tmx", mapWidth, mapHeight, tiles, plots);
     soundBtnR.w = 48;
     soundBtnR.h = 48;
     soundBtnR.x = windowWidth - soundBtnR.w - 20;
@@ -2109,7 +1536,7 @@ int main(int argc, char* argv[])
     inventorySlotX2R = inventorySlotXR;
     inventorySlotX2R.x = inventorySlot2R.x - inventorySlotX2R.w / 2;
     infoText.setText(renderer, robotoF, "You don't have enough energy to leave", { WARNING_COLOR });
-    infoText.dstR.w = infoText.text.length() * LETTER_WIDTH;
+    infoText.dstR.w = 400;
     infoText.dstR.h = 40;
     infoText.dstR.x = windowWidth / 2 - infoText.dstR.w / 2;
     infoText.dstR.y = windowHeight / 2.0f - infoText.dstR.h / 2.0f;
@@ -2137,7 +1564,25 @@ int main(int argc, char* argv[])
     doorR.h = 32;
     doorR.x = 0;
     doorR.y = 0;
-    readData();
+    hungerText.setText(renderer, robotoF, "100");
+    hungerText.dstR.w = 100;
+    hungerText.dstR.h = 40;
+    hungerText.dstR.x = hourText.dstR.x;
+    hungerText.dstR.y = hourText.dstR.y + hourText.dstR.h;
+    gameOverText.setText(renderer, robotoF, "Game over");
+    gameOverText.dstR.w = 400;
+    gameOverText.dstR.h = 100;
+    gameOverText.dstR.x = windowWidth / 2 - gameOverText.dstR.w / 2;
+    gameOverText.dstR.y = windowHeight / 2 - gameOverText.dstR.h / 2;
+    playAgainText.setText(renderer, robotoF, "Play again");
+    playAgainText.dstR.w = 100;
+    playAgainText.dstR.h = 40;
+    playAgainText.dstR.x = windowWidth / 2 - playAgainText.dstR.w / 2;
+    playAgainText.dstR.y = gameOverText.dstR.y + gameOverText.dstR.h;
+    HomeInit(tile, homeGround, homeWall, homeSeparator, windowR, doorI, shopI, player, bedI, chestI, actionText);
+    for (auto& food : foods) {
+        food = Food::Empty;
+    }
     leafClock.restart();
     globalClock.restart();
     rotClock.restart();
@@ -2149,17 +1594,716 @@ int main(int argc, char* argv[])
     potatoClock.restart();
     pumpkinClock.restart();
     playerAnimationClock.restart();
-    HomeInit();
-    for (auto& food : foods) {
-        food = Food::Empty;
-    }
-#ifdef __EMSCRIPTEN__
-    emscripten_set_main_loop(mainLoop, 0, 1);
-#else
+    hungerClock.restart();
+    readData(scoreText, rotDelayInMs, isMuted, maxEnergy, energyText);
     while (running) {
-        mainLoop();
+        float deltaTime = globalClock.restart();
+        SDL_FRect windowR;
+        windowR.w = windowWidth;
+        windowR.h = windowHeight;
+        windowR.x = 0;
+        windowR.y = 0;
+        if (!Mix_PlayingMusic()) {
+            if (currentMusic == Music::JosephKosma) {
+                currentMusic = Music::AntonioVivaldi;
+                Mix_PlayMusic(antonioVivaldiM, 1);
+            }
+            else if (currentMusic == Music::AntonioVivaldi) {
+                currentMusic = Music::JosephKosma;
+                Mix_PlayMusic(josephKosmaM, 1);
+            }
+        }
+        if (state == State::Intro) {
+            SDL_Event event;
+            while (SDL_PollEvent(&event)) {
+                if (event.type == SDL_QUIT || event.type == SDL_KEYDOWN && event.key.keysym.scancode == SDL_SCANCODE_ESCAPE) {
+                    running = false;
+                    // TODO: On mobile remember to use eventWatch function (it doesn't reach this code when terminating)
+                }
+                if (event.type == SDL_WINDOWEVENT && event.window.event == SDL_WINDOWEVENT_RESIZED) {
+                    SDL_RenderSetScale(renderer, event.window.data1 / (float)windowWidth, event.window.data2 / (float)windowHeight);
+                }
+                if (event.type == SDL_KEYDOWN) {
+                    keys[event.key.keysym.scancode] = true;
+                }
+                if (event.type == SDL_KEYUP) {
+                    keys[event.key.keysym.scancode] = false;
+                }
+                if (event.type == SDL_MOUSEBUTTONDOWN) {
+                    buttons[event.button.button] = true;
+                }
+                if (event.type == SDL_MOUSEBUTTONUP) {
+                    buttons[event.button.button] = false;
+                }
+                if (event.type == SDL_MOUSEMOTION) {
+                    float scaleX, scaleY;
+                    SDL_RenderGetScale(renderer, &scaleX, &scaleY);
+                    mousePos.x = event.motion.x / scaleX;
+                    mousePos.y = event.motion.y / scaleY;
+                    realMousePos.x = event.motion.x;
+                    realMousePos.y = event.motion.y;
+                }
+            }
+            if (intro.introClock.getElapsedTime() > 1000) {
+                state = State::Outside;
+            }
+            SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
+            SDL_RenderClear(renderer);
+            SDL_RenderCopyExF(renderer, leafT, 0, &intro.leafR, intro.leafAngle, 0, SDL_FLIP_NONE);
+            if (intro.leafMotion == Motion::Right) {
+                ++intro.leafAngle;
+                if (intro.leafAngle == 75) {
+                    intro.leafMotion = Motion::Left;
+                }
+            }
+            else if (intro.leafMotion == Motion::Left) {
+                --intro.leafAngle;
+                if (intro.leafAngle == -75) {
+                    intro.leafMotion = Motion::Right;
+                }
+            }
+            SDL_RenderPresent(renderer);
+            SDL_Delay(8);
+        }
+        else if (state == State::Outside) {
+            SDL_Event event;
+            while (SDL_PollEvent(&event)) {
+                if (event.type == SDL_QUIT || event.type == SDL_KEYDOWN && event.key.keysym.scancode == SDL_SCANCODE_ESCAPE) {
+                    running = false;
+                    // TODO: On mobile remember to use eventWatch function (it doesn't reach this code when terminating)
+                }
+                if (event.type == SDL_WINDOWEVENT && event.window.event == SDL_WINDOWEVENT_RESIZED) {
+                    SDL_RenderSetScale(renderer, event.window.data1 / (float)windowWidth, event.window.data2 / (float)windowHeight);
+                }
+                if (event.type == SDL_KEYDOWN) {
+                    keys[event.key.keysym.scancode] = true;
+                    if (event.key.keysym.scancode == SDL_SCANCODE_SPACE) {
+                        if (hour >= 7 && hour <= 17) {
+                            canCollect = true;
+                            if (foods[0] == Food::Empty || foods[1] == Food::Empty) {
+                                int index = foods[0] == Food::Empty ? 0 : 1;
+                                for (auto& plot : plots) {
+                                    if (plot.isIntersecting(player.r)) {
+                                        state = State::Minigame;
+                                        if (plot.food == Food::Apple) {
+                                            currentPartT = appleT;
+                                        }
+                                        else if (plot.food == Food::Banana) {
+                                            currentPartT = bananaT;
+                                        }
+                                        else if (plot.food == Food::Carrot) {
+                                            currentPartT = carrotT;
+                                        }
+                                        else if (plot.food == Food::Grape) {
+                                            currentPartT = grapeT;
+                                        }
+                                        else if (plot.food == Food::Potato) {
+                                            currentPartT = potatoT;
+                                        }
+                                        else if (plot.food == Food::Pumpkin) {
+                                            currentPartT = pumpkinT;
+                                        }
+                                        for (int i = 0; i < 10; ++i) {
+                                            parts.push_back(Part());
+                                            parts.back().dstR.w = 32;
+                                            parts.back().dstR.h = 32;
+                                            parts.back().dstR.x = random(0, windowWidth - parts.back().dstR.w);
+                                            parts.back().dstR.y = -parts.back().dstR.h;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        else {
+                            canCollect = false;
+                        }
+                    }
+                }
+                if (event.type == SDL_KEYUP) {
+                    keys[event.key.keysym.scancode] = false;
+                }
+                if (event.type == SDL_MOUSEBUTTONDOWN) {
+                    buttons[event.button.button] = true;
+                    if (SDL_PointInFRect(&mousePos, &soundBtnR)) {
+                        isMuted = !isMuted;
+                        if (isMuted) {
+                            muteMusicAndSounds();
+                        }
+                        else {
+                            unmuteMusicAndSounds();
+                        }
+                    }
+                    if (SDL_PointInFRect(&mousePos, &inventorySlotXR)) {
+                        foods[0] = Food::Empty;
+                    }
+                    if (SDL_PointInFRect(&mousePos, &inventorySlotX2R)) {
+                        foods[1] = Food::Empty;
+                    }
+                }
+                if (event.type == SDL_MOUSEBUTTONUP) {
+                    buttons[event.button.button] = false;
+                }
+                if (event.type == SDL_MOUSEMOTION) {
+                    float scaleX, scaleY;
+                    SDL_RenderGetScale(renderer, &scaleX, &scaleY);
+                    mousePos.x = event.motion.x / scaleX;
+                    mousePos.y = event.motion.y / scaleY;
+                    realMousePos.x = event.motion.x;
+                    realMousePos.y = event.motion.y;
+                }
+            }
+            for (int i = 0; i < entities.size(); ++i) {
+                if (entities[i].direction == Direction::Right) {
+                    entities[i].r.x += 0.01 * deltaTime;
+                }
+                else if (entities[i].direction == Direction::Left) {
+                    entities[i].r.x += -0.01 * deltaTime;
+                }
+                entities[i].r.y = std::pow(entities[i].r.x, 2) / 28;
+            }
+            if (rotClock.getElapsedTime() > rotDelayInMs) {
+                if (std::stoi(scoreText.text) > 0) {
+                    scoreText.setText(renderer, robotoF, std::stoi(scoreText.text) - 1);
+                }
+                rotClock.restart();
+            }
+            shouldShowRotImage = rotClock.getElapsedTime() + 1000 > rotDelayInMs && std::stoi(scoreText.text) > 0;
+            moveTimeByOneHour(timeClock, hour, hourText);
+            if (tradeClock.getElapsedTime() > 1000) // TODO: Set it to 20000
+            {
+                tradeRects.push_back(SDL_FRect());
+                tradeRects.back().w = windowWidth;
+                tradeRects.back().h = windowHeight;
+                tradeRects.back().x = 0;
+                tradeRects.back().y = -windowHeight + 1;
+                tradeClock.restart();
+            }
+            for (int i = 0; i < tradeRects.size(); ++i) {
+                tradeRects[i].y += deltaTime;
+                if (!SDL_HasIntersectionF(&tradeRects[i], &windowR)) {
+                    tradeRects.erase(tradeRects.begin() + i--);
+                    // TODO: Mix prize for each vegetable/fruit (save them to file also)
+                }
+            }
+            player.dx = 0;
+            player.dy = 0;
+            if (shouldGoHome) {
+                if (player.r.x + player.r.w < houseR.x) {
+                    player.r.x += PLAYER_SPEED * deltaTime;
+                }
+                else if (player.r.x > houseR.x + houseR.w) {
+                    player.r.x += -PLAYER_SPEED * deltaTime;
+                }
+                if (player.r.y + player.r.h < houseR.y) {
+                    player.r.y += PLAYER_SPEED * deltaTime;
+                }
+                else if (player.r.y > houseR.y + houseR.h) {
+                    player.r.y += -PLAYER_SPEED * deltaTime;
+                }
+            }
+            else {
+                if (keys[SDL_SCANCODE_A]) {
+                    player.dx = -1;
+                    if (!isMoving) {
+                        energyClock.restart();
+                    }
+                    isMoving = true;
+                    playerDirection = PlayerDirection::Left;
+                }
+                else if (keys[SDL_SCANCODE_D]) {
+                    player.dx = 1;
+                    if (!isMoving) {
+                        energyClock.restart();
+                    }
+                    isMoving = true;
+                    playerDirection = PlayerDirection::Right;
+                }
+                if (keys[SDL_SCANCODE_W]) {
+                    player.dy = -1;
+                    if (!isMoving) {
+                        energyClock.restart();
+                    }
+                    isMoving = true;
+                    playerDirection = PlayerDirection::Up;
+                }
+                else if (keys[SDL_SCANCODE_S]) {
+                    player.dy = 1;
+                    if (!isMoving) {
+                        energyClock.restart();
+                    }
+                    isMoving = true;
+                    playerDirection = PlayerDirection::Down;
+                }
+            }
+            player.r.x = clamp(player.r.x, 0, windowWidth - player.r.w);
+            player.r.y = clamp(player.r.y, 0, windowHeight - player.r.h);
+            if (!keys[SDL_SCANCODE_A] && !keys[SDL_SCANCODE_D]
+                && !keys[SDL_SCANCODE_W] && !keys[SDL_SCANCODE_S]) {
+                isMoving = false;
+            }
+            if (isMoving) {
+                if (energyClock.getElapsedTime() > 1000) {
+                    if (std::stoi(energyText.text) != 0) {
+                        energyText.setText(renderer, robotoF, std::stoi(energyText.text) - 1);
+                    }
+                    if (energyText.text == "0") {
+                        shouldGoHome = true;
+                    }
+                    energyClock.restart();
+                }
+            }
+            player.r.x += player.dx * deltaTime * PLAYER_SPEED;
+            player.r.y += player.dy * deltaTime * PLAYER_SPEED;
+            if (SDL_HasIntersectionF(&houseR, &player.r)) {
+                if (!exitedHome) {
+                    exitedHome = true;
+                    state = State::Home;
+                    Mix_PlayChannel(-1, doorS, 0);
+                }
+            }
+            if (exitedHome) {
+                exitedHome = false;
+            }
+            isCollecting = false;
+            for (auto& plot : plots) {
+                if (plot.isIntersecting(player.r)) {
+                    isCollecting = true;
+                    break;
+                }
+            }
+            if (hungerClock.getElapsedTime() > HUNGER_DECREASE_DELAY_IN_MS) {
+                if (std::stoi(hungerText.text) > 0) {
+                    hungerText.setText(renderer, robotoF, std::stoi(hungerText.text) - 1);
+                    if (std::stoi(hungerText.text) <= 0) {
+                        state = State::Gameover;
+                    }
+                }
+                hungerClock.restart();
+            }
+            SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
+            SDL_RenderClear(renderer);
+            SDL_SetRenderTarget(renderer, bgLayerT);
+            SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
+            SDL_RenderClear(renderer);
+            for (Tile& t : tiles) {
+                SDL_RenderCopyF(renderer, getT(renderer, t.source), &t.srcR, &t.dstR);
+            }
+            for (int i = 0; i < plots.size(); ++i) {
+                plots[i].renderPlot();
+            }
+            if (shouldShowRotImage) {
+                SDL_RenderCopyF(renderer, rotT, 0, &rotR);
+                SDL_RenderCopyF(renderer, houseflyT, 0, &houseflyR);
+                if (houseflyGoingRight) {
+                    houseflyR.x += 0.1 * deltaTime;
+                    if (houseflyR.x + houseflyR.w >= rotR.x + rotR.w) {
+                        houseflyGoingRight = false;
+                        houseflyR.y -= 20;
+                    }
+                }
+                else {
+                    houseflyR.x -= 0.05 * deltaTime;
+                }
+            }
+            else {
+                houseflyR.x = rotR.x;
+                houseflyGoingRight = true;
+                houseflyR.y = rotR.y + rotR.h - houseflyR.h;
+            }
+            SDL_RenderCopyF(renderer, houseT, 0, &houseR);
+            if (isCollecting) {
+                SDL_RenderCopyF(renderer, collectT, 0, &collectR);
+            }
+            SDL_SetRenderTarget(renderer, 0);
+
+            SDL_SetRenderTarget(renderer, lightLayerT);
+            SDL_SetTextureBlendMode(lightLayerT, SDL_BLENDMODE_MOD);
+            SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
+            SDL_RenderClear(renderer);
+            SDL_FRect spotR = player.r;
+            spotR.x -= 200;
+            spotR.y -= 200;
+            spotR.w += 400;
+            spotR.h += 400;
+            if (hour >= 7 && hour <= 17) {
+                spotR.w = windowWidth + 400;
+                spotR.h = windowHeight + 400;
+                spotR.x = -200;
+                spotR.y = -200;
+            }
+            SDL_RenderCopyF(renderer, lightT, 0, &spotR);
+            SDL_SetRenderTarget(renderer, 0);
+
+            SDL_SetRenderTarget(renderer, resultLayerT);
+            SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
+            SDL_RenderClear(renderer);
+            SDL_SetTextureBlendMode(resultLayerT, SDL_BLENDMODE_BLEND);
+            SDL_RenderCopy(renderer, bgLayerT, 0, 0);
+            SDL_RenderCopy(renderer, lightLayerT, 0, 0);
+
+            SDL_SetRenderTarget(renderer, 0);
+            SDL_RenderCopy(renderer, resultLayerT, 0, 0);
+            drawInventory(inventorySlotR, inventorySlot2R, foods, inventorySlotXR, inventorySlotX2R);
+            RenderUI(scoreText, isMuted, soundBtnR, hourText, energyText, hour, sunR, energyR, playerDirection, playerAnimationFrames, playerAnimationFrame, player, isMoving, playerAnimationClock, hungerText, inventorySlotR, inventorySlot2R, foods, inventorySlotXR, inventorySlotX2R);
+            if (!canCollect) {
+                cantCollectText.draw(renderer);
+            }
+            SDL_RenderPresent(renderer);
+        }
+        else if (state == State::Shop) {
+            SDL_Event event;
+            while (SDL_PollEvent(&event)) {
+                if (event.type == SDL_QUIT || event.type == SDL_KEYDOWN && event.key.keysym.scancode == SDL_SCANCODE_ESCAPE) {
+                    running = false;
+                    // TODO: On mobile remember to use eventWatch function (it doesn't reach this code when terminating)
+                }
+                if (event.type == SDL_WINDOWEVENT && event.window.event == SDL_WINDOWEVENT_RESIZED) {
+                    SDL_RenderSetScale(renderer, event.window.data1 / (float)windowWidth, event.window.data2 / (float)windowHeight);
+                }
+                if (event.type == SDL_KEYDOWN) {
+                    keys[event.key.keysym.scancode] = true;
+                }
+                if (event.type == SDL_KEYUP) {
+                    keys[event.key.keysym.scancode] = false;
+                }
+                if (event.type == SDL_MOUSEBUTTONDOWN) {
+                    buttons[event.button.button] = true;
+                    if (SDL_PointInFRect(&mousePos, &shop.backArrowR)) {
+                        state = State::Home;
+                    }
+                    if (SDL_PointInFRect(&mousePos, &shop.lessRotBuyR)) {
+                        if (std::stoi(scoreText.text) >= std::stoi(shop.lessRotPriceText.text)) {
+                            scoreText.setText(renderer, robotoF, std::stoi(scoreText.text) - std::stoi(shop.lessRotPriceText.text));
+                            rotDelayInMs += 1000;
+                            Mix_PlayChannel(-1, powerupS, 0);
+                        }
+                    }
+                    if (SDL_PointInFRect(&mousePos, &shop.moreEnergyBuyR)) {
+                        if (std::stoi(scoreText.text) >= std::stoi(shop.moreEnergyPriceText.text)) {
+                            scoreText.setText(renderer, robotoF, std::stoi(scoreText.text) - std::stoi(shop.moreEnergyPriceText.text));
+                            ++maxEnergy;
+                            Mix_PlayChannel(-1, powerupS, 0);
+                        }
+                    }
+                }
+                if (event.type == SDL_MOUSEBUTTONUP) {
+                    buttons[event.button.button] = false;
+                }
+                if (event.type == SDL_MOUSEMOTION) {
+                    float scaleX, scaleY;
+                    SDL_RenderGetScale(renderer, &scaleX, &scaleY);
+                    mousePos.x = event.motion.x / scaleX;
+                    mousePos.y = event.motion.y / scaleY;
+                    realMousePos.x = event.motion.x;
+                    realMousePos.y = event.motion.y;
+                }
+            }
+            SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
+            SDL_RenderClear(renderer);
+            SDL_RenderCopyF(renderer, leafWithSprayerT, 0, &shop.lessRotR);
+            shop.lessRotText.draw(renderer);
+            shop.lessRotPriceText.draw(renderer);
+            SDL_RenderCopyF(renderer, buyT, 0, &shop.lessRotBuyR);
+            SDL_RenderCopyF(renderer, moreEnergyT, 0, &shop.moreEnergyR);
+            shop.moreEnergyText.draw(renderer);
+            shop.moreEnergyPriceText.draw(renderer);
+            SDL_RenderCopyF(renderer, buyT, 0, &shop.moreEnergyBuyR);
+            SDL_RenderCopyF(renderer, backArrowT, 0, &shop.backArrowR);
+            SDL_RenderPresent(renderer);
+        }
+        else if (state == State::Home) {
+            SDL_Event event;
+            while (SDL_PollEvent(&event)) {
+                if (event.type == SDL_QUIT || event.type == SDL_KEYDOWN && event.key.keysym.scancode == SDL_SCANCODE_ESCAPE) {
+                    running = false;
+                    // TODO: On mobile remember to use eventWatch function (it doesn't reach this code when terminating)
+                }
+                if (event.type == SDL_WINDOWEVENT && event.window.event == SDL_WINDOWEVENT_RESIZED) {
+                    SDL_RenderSetScale(renderer, event.window.data1 / (float)windowWidth, event.window.data2 / (float)windowHeight);
+                }
+                if (event.type == SDL_KEYDOWN) {
+                    keys[event.key.keysym.scancode] = true;
+                    shouldShowWhenCanSleepAndGoShop = false;
+                    shouldShowInfoText = false;
+                    if (event.key.keysym.scancode == SDL_SCANCODE_SPACE) {
+                        if (SDL_HasIntersectionF(&player.r, &shopI.dstR)) {
+                            if (hour >= 0 && hour < 7 || hour > 17) {
+                                state = State::Shop;
+                                shouldShowWhenCanSleepAndGoShop = false;
+                                Mix_PlayChannel(-1, doorS, 0);
+                            }
+                            else {
+                                shouldShowWhenCanSleepAndGoShop = true;
+                            }
+                        }
+                        else if (SDL_HasIntersectionF(&player.r, &doorI.dstR)) {
+                            if (!shouldGoHome) {
+                                state = State::Outside;
+                                player.r.x = houseR.x + houseR.w + 5;
+                                player.r.y = houseR.y + houseR.h / 2 - player.r.h / 2;
+                                canCollect = true;
+                                shouldShowWhenCanSleepAndGoShop = false;
+                                Mix_PlayChannel(-1, doorS, 0);
+                            }
+                            else {
+                                shouldShowInfoText = true;
+                            }
+                        }
+                        else if (SDL_HasIntersectionF(&player.r, &bedI.dstR)) {
+                            if (hour >= 0 && hour < 7 || hour > 17) {
+                                shouldShowWhenCanSleepAndGoShop = false;
+                                hour = 7;
+                                hourText.setText(renderer, robotoF, std::to_string(hour) + "am");
+                                energyText.setText(renderer, robotoF, maxEnergy);
+                                shouldGoHome = false;
+                                shouldShowInfoText = false;
+                                Mix_PlayChannel(-1, sleepS, 0);
+                            }
+                            else {
+                                shouldShowWhenCanSleepAndGoShop = true;
+                            }
+                        }
+                        else if (SDL_HasIntersectionF(&player.r, &bedI.dstR)) {
+                            // TODO: Add Inventory.
+                        }
+                    }
+
+                    if (SDL_HasIntersectionF(&player.r, &shopI.dstR)) {
+                        currentAction.setActionText(shopI.actionText);
+                    }
+                    else if (SDL_HasIntersectionF(&player.r, &doorI.dstR)) {
+                        currentAction.setActionText(doorI.actionText);
+                    }
+                    else if (SDL_HasIntersectionF(&player.r, &bedI.dstR)) {
+                        currentAction.setActionText(bedI.actionText);
+                    }
+                    else if (SDL_HasIntersectionF(&player.r, &chestI.dstR)) {
+                        currentAction.setActionText(chestI.actionText);
+                    }
+                    else {
+                        currentAction.setActionText("");
+                    }
+                }
+                if (event.type == SDL_KEYUP) {
+                    keys[event.key.keysym.scancode] = false;
+                }
+                if (event.type == SDL_MOUSEBUTTONDOWN) {
+                    buttons[event.button.button] = true;
+
+                    if (SDL_PointInFRect(&mousePos, &soundBtnR)) {
+                        isMuted = !isMuted;
+                        if (isMuted) {
+                            muteMusicAndSounds();
+                        }
+                        else {
+                            unmuteMusicAndSounds();
+                        }
+                    }
+                }
+                if (event.type == SDL_MOUSEBUTTONUP) {
+                    buttons[event.button.button] = false;
+                }
+                if (event.type == SDL_MOUSEMOTION) {
+                    float scaleX, scaleY;
+                    SDL_RenderGetScale(renderer, &scaleX, &scaleY);
+                    mousePos.x = event.motion.x / scaleX;
+                    mousePos.y = event.motion.y / scaleY;
+                    realMousePos.x = event.motion.x;
+                    realMousePos.y = event.motion.y;
+                }
+            }
+            player.dx = 0;
+            player.dy = 0;
+            if (keys[SDL_SCANCODE_A]) {
+                player.dx = -1;
+                playerDirection = PlayerDirection::Left;
+            }
+            else if (keys[SDL_SCANCODE_D]) {
+                player.dx = 1;
+                playerDirection = PlayerDirection::Right;
+            }
+            if (keys[SDL_SCANCODE_W]) {
+                player.dy = -1;
+                playerDirection = PlayerDirection::Up;
+            }
+            else if (keys[SDL_SCANCODE_S]) {
+                player.dy = 1;
+                playerDirection = PlayerDirection::Down;
+            }
+            player.r.x += player.dx * deltaTime * PLAYER_SPEED;
+            player.r.y += player.dy * deltaTime * PLAYER_SPEED;
+            player.r.x = clamp(player.r.x, homeGround.x - 20, homeGround.x + homeGround.w - player.r.w + 20);
+            player.r.y = clamp(player.r.y, homeGround.y + 10, homeGround.y + homeGround.h - player.r.h);
+            if (SDL_HasIntersectionF(&player.r, &doorR)) {
+                state = State::Outside;
+            }
+            std::vector<int> scoreGain;
+            for (int i = 0; i < (int)(Food::NumFood); ++i) {
+                scoreGain.push_back(random(1, 10));
+            }
+            for (int i = 0; i < foods.size(); ++i) {
+                if (foods[i] == Food::Apple) {
+                    foods[i] = Food::Empty;
+                    scoreText.setText(renderer, robotoF, std::stoi(scoreText.text) + scoreGain[(int)(Food::Apple)]);
+                }
+                else if (foods[i] == Food::Banana) {
+                    foods[i] = Food::Empty;
+                    scoreText.setText(renderer, robotoF, std::stoi(scoreText.text) + +scoreGain[(int)(Food::Banana)]);
+                }
+                else if (foods[i] == Food::Carrot) {
+                    foods[i] = Food::Empty;
+                    scoreText.setText(renderer, robotoF, std::stoi(scoreText.text) + +scoreGain[(int)(Food::Carrot)]);
+                }
+                else if (foods[i] == Food::Grape) {
+                    foods[i] = Food::Empty;
+                    scoreText.setText(renderer, robotoF, std::stoi(scoreText.text) + +scoreGain[(int)(Food::Grape)]);
+                }
+                else if (foods[i] == Food::Potato) {
+                    foods[i] = Food::Empty;
+                    scoreText.setText(renderer, robotoF, std::stoi(scoreText.text) + +scoreGain[(int)(Food::Potato)]);
+                }
+                else if (foods[i] == Food::Pumpkin) {
+                    foods[i] = Food::Empty;
+                    scoreText.setText(renderer, robotoF, std::stoi(scoreText.text) + +scoreGain[(int)(Food::Pumpkin)]);
+                }
+            }
+            moveTimeByOneHour(timeClock, hour, hourText);
+            if (hungerClock.getElapsedTime() > HUNGER_DECREASE_DELAY_IN_MS) {
+                if (std::stoi(hungerText.text) > 0) {
+                    hungerText.setText(renderer, robotoF, std::stoi(hungerText.text) - 1);
+                    if (std::stoi(hungerText.text) <= 0) {
+                        state = State::Gameover;
+                    }
+                }
+                hungerClock.restart();
+            }
+            SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
+            SDL_RenderClear(renderer);
+            RenderHome(homeGround, tile, homeWall, homeSeparator, hour, windowR, bedI, doorI, shopI, chestI, actionText, currentAction, shouldShowInfoText, infoText, shouldShowWhenCanSleepAndGoShop, canSleepAndGoShopText, scoreText, isMuted, soundBtnR, hourText, energyText, sunR, energyR, playerDirection, playerAnimationFrames, playerAnimationFrame, player, isMoving, playerAnimationClock, hungerText, inventorySlotR, inventorySlot2R, foods, inventorySlotXR, inventorySlotX2R);
+            SDL_RenderPresent(renderer);
+        }
+        else if (state == State::Minigame) {
+            SDL_Event event;
+            while (SDL_PollEvent(&event)) {
+                if (event.type == SDL_QUIT || event.type == SDL_KEYDOWN && event.key.keysym.scancode == SDL_SCANCODE_ESCAPE) {
+                    running = false;
+                    // TODO: On mobile remember to use eventWatch function (it doesn't reach this code when terminating)
+                }
+                if (event.type == SDL_WINDOWEVENT && event.window.event == SDL_WINDOWEVENT_RESIZED) {
+                    SDL_RenderSetScale(renderer, event.window.data1 / (float)windowWidth, event.window.data2 / (float)windowHeight);
+                }
+                if (event.type == SDL_KEYDOWN) {
+                    keys[event.key.keysym.scancode] = true;
+                }
+                if (event.type == SDL_KEYUP) {
+                    keys[event.key.keysym.scancode] = false;
+                }
+                if (event.type == SDL_MOUSEBUTTONDOWN) {
+                    buttons[event.button.button] = true;
+                    for (int i = 0; i < parts.size(); ++i) {
+                        if (SDL_PointInFRect(&mousePos, &parts[i].dstR)) {
+                            parts.erase(parts.begin() + i--);
+                            if (parts.empty()) {
+                                state = State::Outside;
+                                int index = foods[0] == Food::Empty ? 0 : 1;
+                                if (currentPartT == appleT) {
+                                    foods[index] = Food::Apple;
+                                }
+                                else if (currentPartT == bananaT) {
+                                    foods[index] = Food::Banana;
+                                }
+                                else if (currentPartT == grapeT) {
+                                    foods[index] = Food::Grape;
+                                }
+                                else if (currentPartT == carrotT) {
+                                    foods[index] = Food::Carrot;
+                                }
+                                else if (currentPartT == potatoT) {
+                                    foods[index] = Food::Potato;
+                                }
+                                else if (currentPartT == pumpkinT) {
+                                    foods[index] = Food::Pumpkin;
+                                }
+                            }
+                        }
+                    }
+                }
+                if (event.type == SDL_MOUSEBUTTONUP) {
+                    buttons[event.button.button] = false;
+                }
+                if (event.type == SDL_MOUSEMOTION) {
+                    float scaleX, scaleY;
+                    SDL_RenderGetScale(renderer, &scaleX, &scaleY);
+                    mousePos.x = event.motion.x / scaleX;
+                    mousePos.y = event.motion.y / scaleY;
+                    realMousePos.x = event.motion.x;
+                    realMousePos.y = event.motion.y;
+                }
+            }
+            for (int i = 0; i < parts.size(); ++i) {
+                parts[i].dstR.y += PART_SPEED * deltaTime;
+            }
+            for (int i = 0; i < parts.size(); ++i) {
+                if (parts[i].dstR.y + parts[i].dstR.h > windowHeight) {
+                    state = State::Outside;
+                    parts.clear();
+                }
+            }
+            SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
+            SDL_RenderClear(renderer);
+            for (int i = 0; i < parts.size(); ++i) {
+                SDL_RenderCopyF(renderer, currentPartT, 0, &parts[i].dstR);
+            }
+            SDL_RenderPresent(renderer);
+        }
+        else if (state == State::Gameover) {
+            SDL_Event event;
+            while (SDL_PollEvent(&event)) {
+                if (event.type == SDL_QUIT || event.type == SDL_KEYDOWN && event.key.keysym.scancode == SDL_SCANCODE_ESCAPE) {
+                    running = false;
+                    // TODO: On mobile remember to use eventWatch function (it doesn't reach this code when terminating)
+                }
+                if (event.type == SDL_WINDOWEVENT && event.window.event == SDL_WINDOWEVENT_RESIZED) {
+                    SDL_RenderSetScale(renderer, event.window.data1 / (float)windowWidth, event.window.data2 / (float)windowHeight);
+                }
+                if (event.type == SDL_KEYDOWN) {
+                    keys[event.key.keysym.scancode] = true;
+                }
+                if (event.type == SDL_KEYUP) {
+                    keys[event.key.keysym.scancode] = false;
+                }
+                if (event.type == SDL_MOUSEBUTTONDOWN) {
+                    buttons[event.button.button] = true;
+                    if (SDL_PointInFRect(&mousePos, &playAgainText.dstR)) {
+                        goto gameBegin;
+                    }
+                }
+                if (event.type == SDL_MOUSEBUTTONUP) {
+                    buttons[event.button.button] = false;
+                }
+                if (event.type == SDL_MOUSEMOTION) {
+                    float scaleX, scaleY;
+                    SDL_RenderGetScale(renderer, &scaleX, &scaleY);
+                    mousePos.x = event.motion.x / scaleX;
+                    mousePos.y = event.motion.y / scaleY;
+                    realMousePos.x = event.motion.x;
+                    realMousePos.y = event.motion.y;
+                    if (SDL_PointInFRect(&mousePos,&playAgainText.dstR)) {
+                        playAgainText.setText(renderer, robotoF, "Play again", { 255, 0, 0 });
+                    }
+                    else {
+                        playAgainText.setText(renderer, robotoF, "Play again");
+                    }
+                }
+            }
+            SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
+            SDL_RenderClear(renderer);
+            gameOverText.draw(renderer);
+            playAgainText.draw(renderer);
+            SDL_RenderPresent(renderer);
+        }
+        saveData(scoreText, rotDelayInMs, isMuted, maxEnergy);
     }
-#endif
     // TODO: On mobile remember to use eventWatch function (it doesn't reach this code when terminating)
     return 0;
 }

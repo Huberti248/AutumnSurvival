@@ -1940,15 +1940,19 @@ void mainLoop()
 
         if (keys[SDL_SCANCODE_A]) {
             player.dx = -1;
+            playerDirection = PlayerDirection::Left;
         }
         else if (keys[SDL_SCANCODE_D]) {
             player.dx = 1;
+            playerDirection = PlayerDirection::Right;
         }
         if (keys[SDL_SCANCODE_W]) {
             player.dy = -1;
+            playerDirection = PlayerDirection::Up;
         }
         else if (keys[SDL_SCANCODE_S]) {
             player.dy = 1;
+            playerDirection = PlayerDirection::Down;
         }
         player.r.x += player.dx * deltaTime * PLAYER_SPEED;
         player.r.y += player.dy * deltaTime * PLAYER_SPEED;

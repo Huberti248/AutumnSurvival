@@ -1137,7 +1137,7 @@ void moveTimeByOneHour(Clock& timeClock, int& hour, Text& hourText)
     }
 }
 
-void loadMap(std::string path, int& mapWidth, int& mapHeight, std::vector<Tile>& tiles, std::vector<Plot>& plots)
+void loadMap(std::string path, int& mapWidth, int& mapHeight, std::vector<Tile>& tiles, std::vector<Plot>& plots, SDL_FRect houseR)
 {
     pugi::xml_document doc;
     std::size_t length;
@@ -1267,7 +1267,15 @@ shuffleBegin:
             r2.y -= 50;
             r2.w += 100;
             r2.h += 100;
+
             if (SDL_HasIntersectionF(&r1, &r2)) {
+                goto shuffleBegin;
+            }
+            else if (r1.x < 0 || r1.y < 0 || r2.x < 0 || r2.y < 0
+                || r1.x + r1.w > windowWidth  || r1.y + r1.h > windowHeight || r2.x + r2.w > windowWidth || r2.y + r2.h > windowHeight ) {
+                goto shuffleBegin;
+            }
+            else if (SDL_HasIntersectionF(&r1,&houseR) || SDL_HasIntersectionF(&r2,&houseR)) {
                 goto shuffleBegin;
             }
         }
@@ -1433,7 +1441,7 @@ gameBegin:
     Text playAgainText;
     Text gameOverText;
 
-    loadMap("res/map.tmx", mapWidth, mapHeight, tiles, plots);
+    loadMap("res/map.tmx", mapWidth, mapHeight, tiles, plots,houseR);
     soundBtnR.w = 48;
     soundBtnR.h = 48;
     soundBtnR.x = windowWidth - soundBtnR.w - 20;
@@ -2288,7 +2296,7 @@ gameBegin:
                     mousePos.y = event.motion.y / scaleY;
                     realMousePos.x = event.motion.x;
                     realMousePos.y = event.motion.y;
-                    if (SDL_PointInFRect(&mousePos,&playAgainText.dstR)) {
+                    if (SDL_PointInFRect(&mousePos, &playAgainText.dstR)) {
                         playAgainText.setText(renderer, robotoF, "Play again", { 255, 0, 0 });
                     }
                     else {

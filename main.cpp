@@ -74,7 +74,7 @@ using namespace std::chrono_literals;
 #define SCREEN_PADDING 50
 #define EPSILON 0.001
 #define BROWN_COLOR 140, 56, 4, 255
-#define GRAY_COLOR 181, 189, 160, 255
+#define WARNING_COLOR 255, 0, 0, 255
 #define PART_SPEED 0.1
 
 #define HOME_BUTTON_SELECTED \
@@ -142,6 +142,9 @@ SDL_Texture* bgLayerT;
 SDL_Texture* lightLayerT;
 SDL_Texture* resultLayerT;
 SDL_Texture* currentPartT;
+SDL_Texture* doorT;
+SDL_Texture* chestT;
+SDL_Texture* windowT;
 Mix_Music* josephKosmaM;
 Mix_Music* antonioVivaldiM;
 Mix_Chunk* doorS;
@@ -673,73 +676,15 @@ struct Plot {
     }
 };
 
-struct Button {
-    SDL_FRect container;
-    Text text;
-    SDL_Color selected;
-    SDL_Color unselected;
-    SDL_Texture* image;
-    bool isSelected = false;
-    bool hasImage = false;
+struct Interactable {
+    SDL_FRect dstR;
+    std::string actionText;
+    float textLength;
 
-    void init(SDL_Renderer* renderer, const SDL_FRect size, const std::string text)
+    void setActionText(const std::string text)
     {
-        container = size;
-        container.w = static_cast<float>(LETTER_WIDTH * text.length() + 30);
-        container.x = size.x + size.w / 2.0f - container.w / 2.0f;
-        this->text.dstR.w = LETTER_WIDTH * text.length();
-        this->text.dstR.h = 50;
-        this->text.dstR.x = container.x + container.w / 2.0f - this->text.dstR.w / 2.0f;
-        this->text.dstR.y = container.y + container.h / 2.0f - this->text.dstR.h / 2.0f;
-        this->text.setText(renderer, robotoF, text);
-    }
-
-    void setColors(SDL_Color selected, SDL_Color unselected)
-    {
-        this->selected = selected;
-        this->unselected = unselected;
-    }
-
-    void draw(SDL_Renderer* renderer)
-    {
-        if (isSelected) {
-            SDL_SetRenderDrawColor(renderer, selected.r, selected.g, selected.b, selected.a);
-        }
-        else {
-            SDL_SetRenderDrawColor(renderer, unselected.r, unselected.g, unselected.b, unselected.a);
-        }
-
-        SDL_RenderFillRectF(renderer, &container);
-        text.draw(renderer);
-    }
-
-    void draw(SDL_Renderer* renderer, SDL_Texture* texture, SDL_FRect textureR, float offset = 20)
-    {
-        SDL_FRect newContainer;
-        newContainer.h = textureR.h + text.dstR.h + (2 * offset);
-        newContainer.w = std::max(container.w, textureR.w + (2 * offset));
-        newContainer.x = textureR.x - offset / 2.0f;
-        newContainer.y = textureR.y - offset / 2.0f;
-        container = newContainer;
-        this->text.dstR.x = container.x + container.w / 2.0f - this->text.dstR.w / 2.0f;
-        this->text.dstR.y = container.y + container.h - offset - this->text.dstR.h;
-
-        textureR.x = container.x + container.w / 2.0f - textureR.w / 2.0f;
-
-        draw(renderer);
-        SDL_RenderCopyF(renderer, texture, 0, &textureR);
-    }
-
-    void updateButton()
-    {
-        if (SDL_PointInFRect(&mousePos, &container)) {
-            if (!isSelected) {
-                isSelected = true;
-            }
-        }
-        else if (isSelected) {
-            isSelected = false;
-        }
+        actionText = text;
+        textLength = LETTER_WIDTH * text.length();
     }
 };
 
@@ -806,8 +751,6 @@ Clock pumpkinClock;
 Clock timeClock;
 Clock tradeClock;
 Text scoreText;
-SDL_FRect shopR;
-SDL_FRect chestR;
 Shop shop;
 State state = State::Intro;
 Clock rotClock;
@@ -844,9 +787,10 @@ SDL_FRect inventorySlot2R;
 SDL_FRect inventorySlotXR;
 SDL_FRect inventorySlotX2R;
 std::array<Food, 2> foods;
-Button backHomeButton;
-Button shopButton;
-Button sleepButton;
+Interactable doorI;
+Interactable shopI;
+Interactable bedI;
+Interactable chestI;
 bool exitedHome = false;
 SDL_FRect doorR;
 Text infoText;
@@ -856,6 +800,13 @@ bool canCollect = true;
 Text canSleepAndGoShopText;
 bool shouldShowWhenCanSleepAndGoShop = false;
 std::vector<Part> parts;
+SDL_FRect tile;
+SDL_FRect homeGround;
+SDL_FRect homeWall;
+SDL_FRect homeSeparator;
+SDL_FRect windowR;
+Text actionText;
+Interactable currentAction;
 
 void muteMusicAndSounds()
 {
@@ -903,6 +854,10 @@ void readData()
 float clamp(float n, float lower, float upper)
 {
     return std::max(lower, std::min(n, upper));
+}
+
+float lerp(float a, float b, float t) {
+    return (a + t * (b - a));
 }
 
 void SetPosition()
@@ -1060,39 +1015,137 @@ void RenderUI()
     SDL_RenderCopyF(renderer, playerT, 0, &player.r);
 }
 
+int ClosestNumber(int total, int size) {
+    int quotient = total / size;
+    int closest = quotient * size;
+
+    int nextClosest = (total * size) > 0 ? (size * (quotient + 1)) : (size * (quotient - 1));
+    if (abs(total - closest) < abs(total - nextClosest)) {
+        return closest;
+    }
+
+    return nextClosest;
+}
+
 void HomeInit()
 {
-    SDL_FRect tempR;
-    tempR.w = 200;
-    tempR.h = 75;
-    tempR.x = windowWidth / 2.0f - tempR.w / 2.0f;
-    tempR.y = windowHeight - SCREEN_PADDING - tempR.h;
-    backHomeButton.init(renderer, tempR, "Go Back to Farm");
-    backHomeButton.setColors(HOME_BUTTON_SELECTED, HOME_BUTTON_UNSELECTED);
+    tile.w = 32;
+    tile.h = 32;
+    homeGround.w = ClosestNumber(windowWidth * 0.8f, tile.w);
+    homeGround.h = ClosestNumber(windowHeight * 0.8f, tile.h);
+    homeGround.x = windowWidth / 2.0f - homeGround.w / 2.0f;
+    homeGround.y = windowHeight / 2.0f - homeGround.h / 2.0f;
+    homeWall = homeGround;
+    homeWall.h = tile.h * 4;
+    homeSeparator = homeWall;
+    homeSeparator.h = tile.h / 3.0f;
+    homeSeparator.y += homeWall.h - homeSeparator.h;
+    homeGround.h -= homeWall.h;
+    homeGround.y = windowHeight / 2.0f - homeGround.h / 2.0f;
 
-    shopR.w = 96;
-    shopR.h = 96;
-    shopR.x = windowWidth / 2.0f - shopR.w / 2.0f;
-    shopR.y = windowHeight / 2.0f - shopR.h / 2.0f;
+    windowR.w = 128;
+    windowR.h = tile.h * 2.0;
+    windowR.x = windowWidth / 2.0f - windowR.w / 2.0f;
+    windowR.y = homeWall.y + homeWall.h / 2.0f - windowR.h / 2.0f;
 
-    tempR.w = 100;
-    tempR.h = 50;
-    tempR.x = shopR.x + shopR.w / 2.0f - tempR.w / 2.0f;
-    tempR.y = shopR.y + shopR.h + 5;
-    shopButton.init(renderer, tempR, "Shop");
-    shopButton.setColors(HOME_BUTTON_SELECTED, HOME_BUTTON_UNSELECTED);
+    doorI.setActionText("Go back to Farm");
+    doorI.dstR.w = player.r.h + 20;
+    doorI.dstR.h = doorI.dstR.w;
+    doorI.dstR.x = windowWidth / 2.0f - doorI.dstR.w / 2.0f;
+    doorI.dstR.y = homeGround.y + homeGround.h - doorI.dstR.h;
 
-    sleepButton.init(renderer, tempR, "Sleep");
-    sleepButton.setColors(HOME_BUTTON_SELECTED, HOME_BUTTON_UNSELECTED);
+    shopI.setActionText("Shop");
+    shopI.dstR.w = 96;
+    shopI.dstR.h = 96;
+    shopI.dstR.x = homeGround.x + homeGround.w - shopI.dstR.w;
+    shopI.dstR.y = homeGround.y + homeGround.h / 2.0f - shopI.dstR.h / 2.0f;
+
+    bedI.setActionText("Sleep");
+    bedI.dstR.w = 128;
+    bedI.dstR.h = 128;
+    bedI.dstR.x = homeGround.x;
+    bedI.dstR.y = homeGround.y;
+
+    chestI.setActionText("View Inventory");
+    chestI.dstR.w = 64;
+    chestI.dstR.h = 64;
+    chestI.dstR.x = homeGround.w / 2.0f - chestI.dstR.w / 2.0f;
+    chestI.dstR.y = homeGround.h / 2.0f - chestI.dstR.h / 2.0f;
+
+    actionText.setText(renderer, robotoF, "");
+    actionText.dstR.h = 50;
+    actionText.dstR.y = windowHeight - actionText.dstR.h - SCREEN_PADDING;
 }
 
 void RenderHome()
 {
-    backHomeButton.draw(renderer);
-    shopButton.draw(renderer, shopT, shopR);
-    shopR.x -= 200;
-    sleepButton.draw(renderer, bedT, shopR);
-    shopR.x += 200;
+    // Create home map
+    SDL_SetRenderDrawColor(renderer, 209, 180, 140, SDL_ALPHA_OPAQUE);
+    SDL_RenderFillRectF(renderer, &homeGround);
+    
+    float xPos = homeGround.x + homeGround.w - tile.w;
+    int rowTile = 0;
+    int colTile = 0;
+    float yPos = homeGround.y + homeGround.h - tile.h;
+    bool tiled = false;
+    SDL_SetRenderDrawColor(renderer, 255, 244, 224, SDL_ALPHA_OPAQUE);
+    while (!tiled) {
+        bool toTile = false;
+        if (colTile % 2 == 0) {
+            if (rowTile % 2 != 0) {
+                toTile = true;
+            }
+        }
+        else {
+            if (rowTile % 2 == 0) {
+                toTile = true;
+            }
+        }
+
+        if (toTile) {
+            tile.x = xPos;
+            tile.y = yPos;
+            SDL_RenderFillRectF(renderer, &tile);
+        }
+
+        if (++rowTile == (homeGround.w / tile.w)) {
+            if (++colTile == (homeGround.h / tile.h)) {
+                tiled = true;
+            }
+            else {
+                rowTile = 0;
+                yPos -= tile.h;
+                xPos = homeGround.x + homeGround.w - tile.w;
+            }
+        }
+        else {
+            xPos -= tile.w;
+        }
+    }
+    SDL_SetRenderDrawColor(renderer, 143, 204, 203, SDL_ALPHA_OPAQUE);
+    SDL_RenderFillRectF(renderer, &homeWall);
+    SDL_SetRenderDrawColor(renderer, 44, 27, 46, SDL_ALPHA_OPAQUE);
+    SDL_RenderFillRectF(renderer, &homeSeparator);
+
+    if (hour >= 7 && hour <= 17) {
+        SDL_SetRenderDrawColor(renderer, 184, 222, 236, SDL_ALPHA_OPAQUE);
+    }
+    else {
+        SDL_SetRenderDrawColor(renderer, 7, 11, 52, SDL_ALPHA_OPAQUE);
+    }
+    SDL_RenderFillRectF(renderer, &windowR);
+    SDL_RenderCopyF(renderer, windowT, 0, &windowR);
+
+    //Initialize interactables.
+    SDL_RenderCopyF(renderer, bedT, 0, &bedI.dstR);
+    SDL_RenderCopyF(renderer, doorT, 0, &doorI.dstR);
+    SDL_RenderCopyF(renderer, shopT, 0, &shopI.dstR);
+    SDL_RenderCopyF(renderer, chestT, 0, &chestI.dstR);
+
+    actionText.setText(renderer, robotoF, currentAction.actionText);
+    actionText.dstR.w = currentAction.textLength;
+    actionText.dstR.x = windowWidth / 2.0f - actionText.dstR.w / 2.0f;
+    actionText.draw(renderer);
 
     RenderUI();
     if (shouldShowInfoText) {
@@ -1531,49 +1584,74 @@ void mainLoop()
             }
             if (event.type == SDL_KEYDOWN) {
                 keys[event.key.keysym.scancode] = true;
+                shouldShowWhenCanSleepAndGoShop = false;
+                shouldShowInfoText = false;
+                if (event.key.keysym.scancode == SDL_SCANCODE_SPACE) {
+                    if (SDL_HasIntersectionF(&player.r, &shopI.dstR)) {
+                        if (hour >= 0 && hour < 7 || hour > 17) {
+                            state = State::Shop;
+                            shouldShowWhenCanSleepAndGoShop = false;
+                            Mix_PlayChannel(-1, doorS, 0);
+                        }
+                        else {
+                            shouldShowWhenCanSleepAndGoShop = true;
+                        }
+                    }
+                    else if (SDL_HasIntersectionF(&player.r, &doorI.dstR)) {
+                        if (!shouldGoHome) {
+                            state = State::Outside;
+                            player.r.x = houseR.x + houseR.w + 5;
+                            player.r.y = houseR.y + houseR.h / 2 - player.r.h / 2;
+                            canCollect = true;
+                            shouldShowWhenCanSleepAndGoShop = false;
+                            Mix_PlayChannel(-1, doorS, 0);
+                        }
+                        else {
+                            shouldShowInfoText = true;
+                        }
+                    }
+                    else if (SDL_HasIntersectionF(&player.r, &bedI.dstR)) {
+                        if (hour >= 0 && hour < 7 || hour > 17) {
+                            shouldShowWhenCanSleepAndGoShop = false;
+                            hour = 7;
+                            hourText.setText(renderer, robotoF, std::to_string(hour) + "am");
+                            energyText.setText(renderer, robotoF, maxEnergy);
+                            shouldGoHome = false;
+                            shouldShowInfoText = false;
+                            Mix_PlayChannel(-1, sleepS, 0);
+                        }
+                        else {
+                            shouldShowWhenCanSleepAndGoShop = true;
+                        }
+                    }
+                    else if (SDL_HasIntersectionF(&player.r, &bedI.dstR)) {
+                        // TODO: Add Inventory.
+                    }
+                }
+
+                if (SDL_HasIntersectionF(&player.r, &shopI.dstR)) {
+                    currentAction.setActionText(shopI.actionText);
+                }
+                else if (SDL_HasIntersectionF(&player.r, &doorI.dstR)) {
+                    currentAction.setActionText(doorI.actionText);
+                }
+                else if (SDL_HasIntersectionF(&player.r, &bedI.dstR)) {
+                    currentAction.setActionText(bedI.actionText);
+                }
+                else if (SDL_HasIntersectionF(&player.r, &chestI.dstR)) {
+                    currentAction.setActionText(chestI.actionText);
+                }
+                else
+                {
+                    currentAction.setActionText("");
+                }
             }
             if (event.type == SDL_KEYUP) {
                 keys[event.key.keysym.scancode] = false;
             }
             if (event.type == SDL_MOUSEBUTTONDOWN) {
                 buttons[event.button.button] = true;
-                if (SDL_PointInFRect(&mousePos, &shopButton.container)) {
-                    if (hour >= 0 && hour < 7 || hour > 17) {
-                        state = State::Shop;
-                        shouldShowWhenCanSleepAndGoShop = false;
-                        Mix_PlayChannel(-1, doorS, 0);
-                    }
-                    else {
-                        shouldShowWhenCanSleepAndGoShop = true;
-                    }
-                }
-                else if (SDL_PointInFRect(&mousePos, &backHomeButton.container)) {
-                    if (!shouldGoHome) {
-                        state = State::Outside;
-                        player.r.x = houseR.x + houseR.w + 5;
-                        player.r.y = houseR.y + houseR.h / 2 - player.r.h / 2;
-                        canCollect = true;
-                        shouldShowWhenCanSleepAndGoShop = false;
-                        Mix_PlayChannel(-1, doorS, 0);
-                    }
-                    else {
-                        shouldShowInfoText = true;
-                    }
-                }
-                else if (SDL_PointInFRect(&mousePos, &sleepButton.container)) {
-                    if (hour >= 0 && hour < 7 || hour > 17) {
-                        shouldShowWhenCanSleepAndGoShop = false;
-                        hour = 7;
-                        hourText.setText(renderer, robotoF, std::to_string(hour) + "am");
-                        energyText.setText(renderer, robotoF, maxEnergy);
-                        shouldGoHome = false;
-                        shouldShowInfoText = false;
-                        Mix_PlayChannel(-1, sleepS, 0);
-                    }
-                    else {
-                        shouldShowWhenCanSleepAndGoShop = true;
-                    }
-                }
+                
                 if (SDL_PointInFRect(&mousePos, &soundBtnR)) {
                     isMuted = !isMuted;
                     if (isMuted) {
@@ -1594,14 +1672,11 @@ void mainLoop()
                 mousePos.y = event.motion.y / scaleY;
                 realMousePos.x = event.motion.x;
                 realMousePos.y = event.motion.y;
-
-                backHomeButton.updateButton();
-                shopButton.updateButton();
-                sleepButton.updateButton();
             }
         }
         player.dx = 0;
         player.dy = 0;
+
         if (keys[SDL_SCANCODE_A]) {
             player.dx = -1;
         }
@@ -1616,8 +1691,8 @@ void mainLoop()
         }
         player.r.x += player.dx * deltaTime * PLAYER_SPEED;
         player.r.y += player.dy * deltaTime * PLAYER_SPEED;
-        player.r.x = clamp(player.r.x, 0, windowWidth - player.r.w);
-        player.r.y = clamp(player.r.y, 0, windowHeight - player.r.h);
+        player.r.x = clamp(player.r.x, homeGround.x - 20, homeGround.x + homeGround.w - player.r.w + 20);
+        player.r.y = clamp(player.r.y, homeGround.y + 10, homeGround.y + homeGround.h - player.r.h);
         if (SDL_HasIntersectionF(&player.r, &doorR)) {
             state = State::Outside;
         }
@@ -1790,6 +1865,9 @@ int main(int argc, char* argv[])
     xT = IMG_LoadTexture(renderer, "res/x.png");
     bedT = IMG_LoadTexture(renderer, "res/bed.png");
     lightT = IMG_LoadTexture(renderer, "res/light.png");
+    doorT = IMG_LoadTexture(renderer, "res/door.png");
+    chestT = IMG_LoadTexture(renderer, "res/chest.png");
+    windowT = IMG_LoadTexture(renderer, "res/window.png");
     josephKosmaM = Mix_LoadMUS("res/autumnLeavesJosephKosma.mp3");
     antonioVivaldiM = Mix_LoadMUS("res/jesienAntonioVivaldi.mp3");
     doorS = Mix_LoadWAV("res/door.wav");
@@ -1899,29 +1977,21 @@ int main(int argc, char* argv[])
     inventorySlotXR.y = inventorySlotR.y - inventorySlotXR.h;
     inventorySlotX2R = inventorySlotXR;
     inventorySlotX2R.x = inventorySlot2R.x - inventorySlotX2R.w / 2;
-    doorR.w = 32;
-    doorR.h = 32;
-    doorR.x = windowWidth - doorR.w - 20;
-    doorR.y = windowHeight / 2 - doorR.h / 2;
-    chestR.w = 32;
-    chestR.h = 32;
-    chestR.x = 20;
-    chestR.y = windowHeight / 2 - chestR.h / 2;
-    infoText.setText(renderer, robotoF, "You don't have enought energy to leave");
-    infoText.dstR.w = 250;
+    infoText.setText(renderer, robotoF, "You don't have enough energy to leave", { WARNING_COLOR });
+    infoText.dstR.w = infoText.text.length() * LETTER_WIDTH;
     infoText.dstR.h = 40;
     infoText.dstR.x = windowWidth / 2 - infoText.dstR.w / 2;
-    infoText.dstR.y = 200;
+    infoText.dstR.y = windowHeight / 2.0f - infoText.dstR.h / 2.0f;
     cantCollectText.setText(renderer, robotoF, "You can't collect in the night");
     cantCollectText.dstR.w = 180;
     cantCollectText.dstR.h = 40;
     cantCollectText.dstR.x = windowWidth / 2 - cantCollectText.dstR.w / 2;
     cantCollectText.dstR.y = 250;
-    canSleepAndGoShopText.setText(renderer, robotoF, "You can sleep and go shop only in the night");
-    canSleepAndGoShopText.dstR.w = 220;
+    canSleepAndGoShopText.setText(renderer, robotoF, "You can sleep and go shop only in the night", { WARNING_COLOR });
+    canSleepAndGoShopText.dstR.w = clamp(canSleepAndGoShopText.text.length() * LETTER_WIDTH, 10, windowWidth * 0.9f);
     canSleepAndGoShopText.dstR.h = 40;
     canSleepAndGoShopText.dstR.x = windowWidth / 2 - canSleepAndGoShopText.dstR.w / 2;
-    canSleepAndGoShopText.dstR.y = infoText.dstR.y - canSleepAndGoShopText.dstR.h;
+    canSleepAndGoShopText.dstR.y = windowHeight / 2.0f - canSleepAndGoShopText.dstR.h / 2.0f;
     bgLayerT = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, windowWidth, windowHeight);
     lightLayerT = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, windowWidth, windowHeight);
     resultLayerT = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, windowWidth, windowHeight);

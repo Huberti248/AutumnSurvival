@@ -891,7 +891,8 @@ float clamp(float n, float lower, float upper)
     return std::max(lower, std::min(n, upper));
 }
 
-float lerp(float a, float b, float t) {
+float lerp(float a, float b, float t)
+{
     return (a + t * (b - a));
 }
 
@@ -996,7 +997,8 @@ void RenderUI()
     }
 }
 
-int ClosestNumber(int total, int size) {
+int ClosestNumber(int total, int size)
+{
     int quotient = total / size;
     int closest = quotient * size;
 
@@ -1063,7 +1065,7 @@ void RenderHome()
     // Create home map
     SDL_SetRenderDrawColor(renderer, 209, 180, 140, SDL_ALPHA_OPAQUE);
     SDL_RenderFillRectF(renderer, &homeGround);
-    
+
     float xPos = homeGround.x + homeGround.w - tile.w;
     int rowTile = 0;
     int colTile = 0;
@@ -1210,6 +1212,7 @@ void loadMap(std::string path)
     auto rd = std::random_device{};
     auto rng = std::default_random_engine{ rd() };
 shuffleBegin:
+    plots.clear();
     std::shuffle(std::begin(tiles), std::end(tiles), rng);
     std::vector<int> trees;
     // NOTE: Assume that there are no empty tiles
@@ -1219,160 +1222,6 @@ shuffleBegin:
             // NOTE: Some of them shouldn't be placed together (trees). Randomize, if they are too close randomize once again
             if (tiles[index].source != "sand_tile.png") {
                 trees.push_back(index);
-                int lU = (x - 1) + ((y - 1) * mapNode.attribute("width").as_int());
-                int u = (x) + ((y - 1) * mapNode.attribute("width").as_int());
-                int rU = (x + 1) + ((y - 1) * mapNode.attribute("width").as_int());
-                int l = (x - 1) + ((y)*mapNode.attribute("width").as_int());
-                int r = (x + 1) + ((y)*mapNode.attribute("width").as_int());
-                int lD = (x - 1) + ((y + 1) * mapNode.attribute("width").as_int());
-                int d = (x) + ((y + 1) * mapNode.attribute("width").as_int());
-                int rD = (x + 1) + ((y + 1) * mapNode.attribute("width").as_int());
-                // TODO: Prevent trees being so close that on click you pickup two, three of more at the same time
-                // TODO: Tree shouldn't go out of border
-                // TODO: Fix black tiles at the bottom
-                if (lU >= 0 && lU < tiles.size()) {
-                    if (tiles[lU].source != "sand_tile.png") {
-                        goto shuffleBegin;
-                    }
-                }
-                if (u >= 0 && u < tiles.size()) {
-                    if (tiles[u].source != "sand_tile.png") {
-                        goto shuffleBegin;
-                    }
-                }
-                if (rU >= 0 && rU < tiles.size()) {
-                    if (tiles[rU].source != "sand_tile.png") {
-                        goto shuffleBegin;
-                    }
-                }
-                if (l >= 0 && l < tiles.size()) {
-                    if (tiles[l].source != "sand_tile.png") {
-                        goto shuffleBegin;
-                    }
-                }
-                if (r >= 0 && r < tiles.size()) {
-                    if (tiles[r].source != "sand_tile.png") {
-                        goto shuffleBegin;
-                    }
-                }
-                if (lD >= 0 && lD < tiles.size()) {
-                    if (tiles[lD].source != "sand_tile.png") {
-                        goto shuffleBegin;
-                    }
-                }
-                if (d >= 0 && d < tiles.size()) {
-                    if (tiles[d].source != "sand_tile.png") {
-                        goto shuffleBegin;
-                    }
-                }
-                if (rD >= 0 && rD < tiles.size()) {
-                    if (tiles[rD].source != "sand_tile.png") {
-                        goto shuffleBegin;
-                    }
-                }
-                int lU2 = (x - 2) + ((y - 2) * mapNode.attribute("width").as_int());
-                int u2 = (x) + ((y - 2) * mapNode.attribute("width").as_int());
-                int rU2 = (x + 2) + ((y - 2) * mapNode.attribute("width").as_int());
-                int l2 = (x - 2) + ((y)*mapNode.attribute("width").as_int());
-                int r2 = (x + 2) + ((y)*mapNode.attribute("width").as_int());
-                int lD2 = (x - 2) + ((y + 2) * mapNode.attribute("width").as_int());
-                int d2 = (x) + ((y + 2) * mapNode.attribute("width").as_int());
-                int rD2 = (x + 2) + ((y + 2) * mapNode.attribute("width").as_int());
-
-                int lU3 = (x - 2) + ((y - 1) * mapNode.attribute("width").as_int());
-                int lU4 = (x - 1) + ((y - 2) * mapNode.attribute("width").as_int());
-
-                int rU3 = (x + 2) + ((y - 1) * mapNode.attribute("width").as_int());
-                int rU4 = (x + 1) + ((y - 2) * mapNode.attribute("width").as_int());
-
-                int rD3 = (x + 2) + ((y + 1) * mapNode.attribute("width").as_int());
-                int rD4 = (x + 1) + ((y + 2) * mapNode.attribute("width").as_int());
-
-                int lD3 = (x - 2) + ((y + 1) * mapNode.attribute("width").as_int());
-                int lD4 = (x - 1) + ((y + 2) * mapNode.attribute("width").as_int());
-
-                if (lU2 >= 0 && lU2 < tiles.size()) {
-                    if (tiles[lU2].source != "sand_tile.png") {
-                        goto shuffleBegin;
-                    }
-                }
-                if (u2 >= 0 && u2 < tiles.size()) {
-                    if (tiles[u2].source != "sand_tile.png") {
-                        goto shuffleBegin;
-                    }
-                }
-                if (rU2 >= 0 && rU2 < tiles.size()) {
-                    if (tiles[rU2].source != "sand_tile.png") {
-                        goto shuffleBegin;
-                    }
-                }
-                if (l2 >= 0 && l2 < tiles.size()) {
-                    if (tiles[l2].source != "sand_tile.png") {
-                        goto shuffleBegin;
-                    }
-                }
-                if (r2 >= 0 && r2 < tiles.size()) {
-                    if (tiles[r2].source != "sand_tile.png") {
-                        goto shuffleBegin;
-                    }
-                }
-                if (lD2 >= 0 && lD2 < tiles.size()) {
-                    if (tiles[lD2].source != "sand_tile.png") {
-                        goto shuffleBegin;
-                    }
-                }
-                if (d2 >= 0 && d2 < tiles.size()) {
-                    if (tiles[d2].source != "sand_tile.png") {
-                        goto shuffleBegin;
-                    }
-                }
-                if (rD2 >= 0 && rD2 < tiles.size()) {
-                    if (tiles[rD2].source != "sand_tile.png") {
-                        goto shuffleBegin;
-                    }
-                }
-
-                if (lU3 >= 0 && lU3 < tiles.size()) {
-                    if (tiles[lU3].source != "sand_tile.png") {
-                        goto shuffleBegin;
-                    }
-                }
-                if (lU4 >= 0 && lU4 < tiles.size()) {
-                    if (tiles[lU4].source != "sand_tile.png") {
-                        goto shuffleBegin;
-                    }
-                }
-                if (rU3 >= 0 && rU3 < tiles.size()) {
-                    if (tiles[rU3].source != "sand_tile.png") {
-                        goto shuffleBegin;
-                    }
-                }
-                if (rU4 >= 0 && rU4 < tiles.size()) {
-                    if (tiles[rU4].source != "sand_tile.png") {
-                        goto shuffleBegin;
-                    }
-                }
-
-                if (rD3 >= 0 && rD3 < tiles.size()) {
-                    if (tiles[rD3].source != "sand_tile.png") {
-                        goto shuffleBegin;
-                    }
-                }
-                if (rD4 >= 0 && rD4 < tiles.size()) {
-                    if (tiles[rD4].source != "sand_tile.png") {
-                        goto shuffleBegin;
-                    }
-                }
-                if (lD3 >= 0 && lD3 < tiles.size()) {
-                    if (tiles[lD3].source != "sand_tile.png") {
-                        goto shuffleBegin;
-                    }
-                }
-                if (lD4 >= 0 && lD4 < tiles.size()) {
-                    if (tiles[lD4].source != "sand_tile.png") {
-                        goto shuffleBegin;
-                    }
-                }
             }
         }
     }
@@ -1421,6 +1270,24 @@ shuffleBegin:
                 else if (tiles[index].id == 7) {
                     plots.back().food = Food::Carrot;
                 }
+            }
+        }
+    }
+    for (int i = 0; i < trees.size(); ++i) {
+        for (int j = i + 1; j < trees.size(); ++j) {
+            SDL_FRect r1 = tiles[trees[i]].dstR;
+            SDL_FRect r2 = tiles[trees[j]].dstR;
+            r1.x -= 50;
+            r1.y -= 50;
+            r1.w += 100;
+            r1.h += 100;
+
+            r2.x -= 50;
+            r2.y -= 50;
+            r2.w += 100;
+            r2.h += 100;
+            if (SDL_HasIntersectionF(&r1, &r2)) {
+                goto shuffleBegin;
             }
         }
     }
@@ -1902,8 +1769,7 @@ void mainLoop()
                 else if (SDL_HasIntersectionF(&player.r, &chestI.dstR)) {
                     currentAction.setActionText(chestI.actionText);
                 }
-                else
-                {
+                else {
                     currentAction.setActionText("");
                 }
             }
@@ -1912,7 +1778,7 @@ void mainLoop()
             }
             if (event.type == SDL_MOUSEBUTTONDOWN) {
                 buttons[event.button.button] = true;
-                
+
                 if (SDL_PointInFRect(&mousePos, &soundBtnR)) {
                     isMuted = !isMuted;
                     if (isMuted) {
@@ -2267,10 +2133,10 @@ int main(int argc, char* argv[])
     for (int i = 0; i < 8; ++i) {
         playerAnimationFrames.push_back({ i * 32, 0, 32, 32 });
     }
-    doorR.w=32;
-    doorR.h=32;
-    doorR.x=0;
-    doorR.y=0;
+    doorR.w = 32;
+    doorR.h = 32;
+    doorR.x = 0;
+    doorR.y = 0;
     readData();
     leafClock.restart();
     globalClock.restart();

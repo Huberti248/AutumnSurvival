@@ -1606,11 +1606,11 @@ gameBegin:
     readData(scoreText, rotDelayInMs, isMuted, maxEnergy, energyText);
     while (running) {
         float deltaTime = globalClock.restart();
-        SDL_FRect windowR;
-        windowR.w = windowWidth;
-        windowR.h = windowHeight;
-        windowR.x = 0;
-        windowR.y = 0;
+        SDL_FRect windowScreenR;
+        windowScreenR.w = windowWidth;
+        windowScreenR.h = windowHeight;
+        windowScreenR.x = 0;
+        windowScreenR.y = 0;
         if (!Mix_PlayingMusic()) {
             if (currentMusic == Music::JosephKosma) {
                 currentMusic = Music::AntonioVivaldi;
@@ -1788,7 +1788,7 @@ gameBegin:
             }
             for (int i = 0; i < tradeRects.size(); ++i) {
                 tradeRects[i].y += deltaTime;
-                if (!SDL_HasIntersectionF(&tradeRects[i], &windowR)) {
+                if (!SDL_HasIntersectionF(&tradeRects[i], &windowScreenR)) {
                     tradeRects.erase(tradeRects.begin() + i--);
                     // TODO: Mix prize for each vegetable/fruit (save them to file also)
                 }
@@ -2187,7 +2187,10 @@ gameBegin:
             }
             SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
             SDL_RenderClear(renderer);
-            RenderHome(homeGround, tile, homeWall, homeSeparator, hour, windowR, bedI, doorI, shopI, chestI, actionText, currentAction, shouldShowInfoText, infoText, shouldShowWhenCanSleepAndGoShop, canSleepAndGoShopText, scoreText, isMuted, soundBtnR, hourText, energyText, sunR, energyR, playerDirection, playerAnimationFrames, playerAnimationFrame, player, isMoving, playerAnimationClock, hungerText, inventorySlotR, inventorySlot2R, foods, inventorySlotXR, inventorySlotX2R);
+            RenderHome(homeGround, tile, homeWall, homeSeparator, hour, windowR, bedI, doorI, shopI, chestI,
+                actionText, currentAction, shouldShowInfoText, infoText, shouldShowWhenCanSleepAndGoShop, canSleepAndGoShopText, scoreText, isMuted,
+                soundBtnR, hourText, energyText, sunR, energyR, playerDirection, playerAnimationFrames, playerAnimationFrame, player, isMoving,
+                playerAnimationClock, hungerText, inventorySlotR, inventorySlot2R, foods, inventorySlotXR, inventorySlotX2R);
             SDL_RenderPresent(renderer);
         }
         else if (state == State::Minigame) {

@@ -699,6 +699,7 @@ enum class State {
     Home,
     Minigame,
     Gameover,
+    Storage
 };
 
 struct Shop {
@@ -756,6 +757,63 @@ SDL_Texture* getT(SDL_Renderer* renderer, std::string name)
         return it->second;
     }
 }
+
+struct StorageUI {
+    SDL_FRect container{};
+    SDL_FRect imgContainer{};
+    Text amountText;
+    int amount = 0;
+    bool isChest;
+    Food foodType;
+
+    void init(SDL_FRect r, Food foodType, bool isChest = true) {
+        container = r;
+
+        imgContainer.w = container.w * 0.9f;
+        imgContainer.h = container.h * 0.9f;
+        imgContainer.x = container.x + container.w / 2.0f - imgContainer.w / 2.0f;
+        imgContainer.y = container.y + container.h / 2.0f - imgContainer.h / 2.0f;
+
+        this->amountText.dstR.w = container.w * 0.25f;
+        this->amountText.dstR.h = container.h * 0.25f;
+        this->amountText.dstR.x = container.x + container.w - this->amountText.dstR.w;
+        this->amountText.dstR.y = container.y + container.h - this->amountText.dstR.h;
+
+        this->foodType = foodType;
+        this->isChest = isChest;
+    }
+
+    void draw(SDL_Renderer* renderer) {
+        SDL_SetRenderDrawColor(renderer, 255, 255, 255, SDL_ALPHA_OPAQUE);
+        SDL_RenderDrawRectF(renderer, &container);
+        if (foodType != Food::Empty) {
+            SDL_RenderCopyF(renderer, GetFoodTexture(foodType), 0, &imgContainer);
+            std::string textAmount = "X" + std::to_string(amount);
+            this->amountText.setText(renderer, robotoF, textAmount);
+            this->amountText.draw(renderer);
+        }
+    }
+
+    std::string getFoodName() {
+        switch (foodType)
+        {
+        case Food::Apple:
+            return "Apple";
+        case Food::Banana:
+            return "Banana";
+        case Food::Carrot:
+            return "Carrot";
+        case Food::Grape:
+            return "Grape";
+        case Food::Potato:
+            return "Potato";
+        case Food::Pumpkin:
+            return "Pumpkin";
+        default:
+            return "";
+        }
+    }
+};
 
 enum class PlayerDirection {
     Left,
@@ -824,7 +882,7 @@ void RenderScreen(std::vector<Plot> plots)
     }
 }
 
-void drawInventory(SDL_FRect inventorySlotR, SDL_FRect inventorySlot2R, std::array<Food, 2> foods, SDL_FRect inventorySlotXR, SDL_FRect inventorySlotX2R)
+void DrawInventory(SDL_FRect inventorySlotR, SDL_FRect inventorySlot2R, std::array<Food, 2> foods, SDL_FRect inventorySlotXR, SDL_FRect inventorySlotX2R)
 {
     SDL_SetRenderDrawColor(renderer, BROWN_COLOR);
     SDL_RenderFillRectF(renderer, &inventorySlotR);
@@ -910,7 +968,7 @@ void RenderUI(Text scoreText,
     }
     energyText.draw(renderer);
     SDL_RenderCopyF(renderer, energyT, 0, &energyR);
-    drawInventory(inventorySlotR, inventorySlot2R, foods, inventorySlotXR, inventorySlotX2R);
+    DrawInventory(inventorySlotR, inventorySlot2R, foods, inventorySlotXR, inventorySlotX2R);
     if (playerDirection == PlayerDirection::Left) {
         SDL_RenderCopyExF(renderer, playerT, &playerAnimationFrames[playerAnimationFrame], &player.r, 0, 0, SDL_FLIP_HORIZONTAL);
     }
@@ -957,7 +1015,17 @@ int ClosestNumber(int total, int size)
     return nextClosest;
 }
 
-void HomeInit(SDL_FRect& tile, SDL_FRect& homeGround, SDL_FRect& homeWall, SDL_FRect& homeSeparator, SDL_FRect& windowR, Interactable& doorI, Interactable& shopI, Player& player, Interactable& bedI, Interactable& chestI, Text& actionText)
+void HomeInit(SDL_FRect& tile, 
+    SDL_FRect& homeGround, 
+    SDL_FRect& homeWall, 
+    SDL_FRect& homeSeparator, 
+    SDL_FRect& windowR, 
+    Interactable& doorI, 
+    Interactable& shopI, 
+    Player& player, 
+    Interactable& bedI, 
+    Interactable& chestI, 
+    Text& actionText)
 {
     tile.w = 32;
     tile.h = 32;
@@ -1117,6 +1185,75 @@ void RenderHome(SDL_FRect homeGround,
     }
     if (shouldShowWhenCanSleepAndGoShop) {
         canSleepAndGoShopText.draw(renderer);
+    }
+}
+
+void StorageInit(SDL_FRect& container,
+    Text& inventoryTitleText,
+    Text& titleText,
+    std::vector<StorageUI>& storage,
+    std::vector<SDL_FRect>& storageInventory)
+{
+    container.w = windowWidth * 0.8f;
+    container.h = windowHeight * 0.8f;
+    container.x = windowWidth / 2.0f - container.w / 2.0f;
+    container.y = windowHeight / 2.0f - container.h / 2.0f;
+
+    titleText.setText(renderer, robotoF, "Storage", { 255, 0, 0 });
+    titleText.dstR.w = clamp(titleText.text.length() * LETTER_WIDTH, 0, container.w * 0.8f);
+    titleText.dstR.h = 50;
+    titleText.dstR.x = windowWidth / 2.0f - titleText.dstR.w / 2.0f;
+    titleText.dstR.y = container.y + 10;
+
+    inventoryTitleText.setText(renderer, robotoF, "Inventory", { 255, 0, 0 });
+    inventoryTitleText.dstR.w = clamp(inventoryTitleText.text.length() * LETTER_WIDTH, 0, container.w * 0.8f);
+    inventoryTitleText.dstR.h = 50;
+    inventoryTitleText.dstR.x = windowWidth / 2.0f - inventoryTitleText.dstR.w / 2.0f;
+
+    int rows = 2;
+    int cols = 3;
+    SDL_FRect tempPos{};
+    tempPos.w = (container.w - (cols + 1) * 25) / cols;
+    tempPos.h = (container.h - (rows + 4) * 10 - inventoryTitleText.dstR.h - titleText.dstR.h) / (rows + 1);
+    tempPos.x = container.x + 25;
+    tempPos.y = titleText.dstR.y + titleText.dstR.h + 10;
+    for (int i = 0; i < static_cast<int>(Food::NumFood); i++) {
+        StorageUI item;
+        SDL_FRect pos = tempPos;
+        pos.x = tempPos.x + (tempPos.w + 25) * (i % cols);
+        pos.y = tempPos.y + (tempPos.h + 10) * (i % rows);
+        item.init(pos, static_cast<Food>(i));
+        storage.push_back(item);
+    }
+
+    inventoryTitleText.dstR.y = tempPos.y + ((tempPos.h + 10) * rows);
+    tempPos.x = container.x + container.w / 2.0f - 5 - tempPos.w;
+    tempPos.y = inventoryTitleText.dstR.y + 10 + inventoryTitleText.dstR.h;
+    for (int i = 0; i < 2; i++) {
+        SDL_FRect pos = tempPos;
+        pos.x = tempPos.x + (tempPos.w + 25) * (i % 2);
+        storageInventory.push_back(pos);
+    }
+}
+
+void RenderStorage(SDL_FRect& container,
+    Text& hoverText,
+    Text& titleText,
+    std::vector<StorageUI>& storage,
+    std::vector<SDL_FRect>& storageInventory,
+    std::array<Food, 2> foods) 
+{
+    SDL_SetRenderDrawColor(renderer, 0, 0, 0, SDL_ALPHA_OPAQUE);
+    SDL_RenderFillRectF(renderer, &container);
+    titleText.draw(renderer);
+    hoverText.draw(renderer);
+    for (auto& s : storage) {
+        s.draw(renderer);
+    }
+    for (int i = 0; i < storageInventory.size(); i++) {
+        StorageUI uiInventory{};
+        uiInventory.init(storageInventory[i], foods[i], false);
+        uiInventory.draw(renderer);
     }
 }
 
@@ -1440,6 +1577,11 @@ gameBegin:
     Clock hungerClock;
     Text playAgainText;
     Text gameOverText;
+    SDL_FRect storageContainer{};
+    Text storageTitleText;
+    Text storageHoverText;
+    std::vector<StorageUI> storage;
+    std::vector<SDL_FRect> storageInvenPlaceholder;
 
     loadMap("res/map.tmx", mapWidth, mapHeight, tiles, plots,houseR);
     soundBtnR.w = 48;
@@ -1588,6 +1730,7 @@ gameBegin:
     playAgainText.dstR.x = windowWidth / 2 - playAgainText.dstR.w / 2;
     playAgainText.dstR.y = gameOverText.dstR.y + gameOverText.dstR.h;
     HomeInit(tile, homeGround, homeWall, homeSeparator, windowR, doorI, shopI, player, bedI, chestI, actionText);
+    StorageInit(storageContainer, storageHoverText, storageTitleText, storage, storageInvenPlaceholder);
     for (auto& food : foods) {
         food = Food::Empty;
     }
@@ -1951,7 +2094,7 @@ gameBegin:
 
             SDL_SetRenderTarget(renderer, 0);
             SDL_RenderCopy(renderer, resultLayerT, 0, 0);
-            drawInventory(inventorySlotR, inventorySlot2R, foods, inventorySlotXR, inventorySlotX2R);
+            DrawInventory(inventorySlotR, inventorySlot2R, foods, inventorySlotXR, inventorySlotX2R);
             RenderUI(scoreText, isMuted, soundBtnR, hourText, energyText, hour, sunR, energyR, playerDirection, playerAnimationFrames, playerAnimationFrame, player, isMoving, playerAnimationClock, hungerText, inventorySlotR, inventorySlot2R, foods, inventorySlotXR, inventorySlotX2R);
             if (!canCollect) {
                 cantCollectText.draw(renderer);
@@ -2071,8 +2214,8 @@ gameBegin:
                                 shouldShowWhenCanSleepAndGoShop = true;
                             }
                         }
-                        else if (SDL_HasIntersectionF(&player.r, &bedI.dstR)) {
-                            // TODO: Add Inventory.
+                        else if (SDL_HasIntersectionF(&player.r, &chestI.dstR)) {
+                            state = State::Storage;
                         }
                     }
 
@@ -2149,6 +2292,7 @@ gameBegin:
             for (int i = 0; i < (int)(Food::NumFood); ++i) {
                 scoreGain.push_back(random(1, 10));
             }
+
             for (int i = 0; i < foods.size(); ++i) {
                 if (foods[i] == Food::Apple) {
                     foods[i] = Food::Empty;
@@ -2156,23 +2300,23 @@ gameBegin:
                 }
                 else if (foods[i] == Food::Banana) {
                     foods[i] = Food::Empty;
-                    scoreText.setText(renderer, robotoF, std::stoi(scoreText.text) + +scoreGain[(int)(Food::Banana)]);
+                    scoreText.setText(renderer, robotoF, std::stoi(scoreText.text) + scoreGain[(int)(Food::Banana)]);
                 }
                 else if (foods[i] == Food::Carrot) {
                     foods[i] = Food::Empty;
-                    scoreText.setText(renderer, robotoF, std::stoi(scoreText.text) + +scoreGain[(int)(Food::Carrot)]);
+                    scoreText.setText(renderer, robotoF, std::stoi(scoreText.text) + scoreGain[(int)(Food::Carrot)]);
                 }
                 else if (foods[i] == Food::Grape) {
                     foods[i] = Food::Empty;
-                    scoreText.setText(renderer, robotoF, std::stoi(scoreText.text) + +scoreGain[(int)(Food::Grape)]);
+                    scoreText.setText(renderer, robotoF, std::stoi(scoreText.text) + scoreGain[(int)(Food::Grape)]);
                 }
                 else if (foods[i] == Food::Potato) {
                     foods[i] = Food::Empty;
-                    scoreText.setText(renderer, robotoF, std::stoi(scoreText.text) + +scoreGain[(int)(Food::Potato)]);
+                    scoreText.setText(renderer, robotoF, std::stoi(scoreText.text) + scoreGain[(int)(Food::Potato)]);
                 }
                 else if (foods[i] == Food::Pumpkin) {
                     foods[i] = Food::Empty;
-                    scoreText.setText(renderer, robotoF, std::stoi(scoreText.text) + +scoreGain[(int)(Food::Pumpkin)]);
+                    scoreText.setText(renderer, robotoF, std::stoi(scoreText.text) + scoreGain[(int)(Food::Pumpkin)]);
                 }
             }
             moveTimeByOneHour(timeClock, hour, hourText);
@@ -2313,6 +2457,52 @@ gameBegin:
             playAgainText.draw(renderer);
             SDL_RenderPresent(renderer);
         }
+        else if (state == State::Storage) {
+        SDL_Event event;
+        while (SDL_PollEvent(&event)) {
+            if (event.type == SDL_QUIT || event.type == SDL_KEYDOWN && event.key.keysym.scancode == SDL_SCANCODE_ESCAPE) {
+                running = false;
+                // TODO: On mobile remember to use eventWatch function (it doesn't reach this code when terminating)
+            }
+            if (event.type == SDL_WINDOWEVENT && event.window.event == SDL_WINDOWEVENT_RESIZED) {
+                SDL_RenderSetScale(renderer, event.window.data1 / (float)windowWidth, event.window.data2 / (float)windowHeight);
+            }
+            if (event.type == SDL_KEYDOWN) {
+                keys[event.key.keysym.scancode] = true;
+            }
+            if (event.type == SDL_KEYUP) {
+                keys[event.key.keysym.scancode] = false;
+            }
+            if (event.type == SDL_MOUSEBUTTONDOWN) {
+                buttons[event.button.button] = true;
+                if (SDL_PointInFRect(&mousePos, &playAgainText.dstR)) {
+                    goto gameBegin;
+                }
+            }
+            if (event.type == SDL_MOUSEBUTTONUP) {
+                buttons[event.button.button] = false;
+            }
+            if (event.type == SDL_MOUSEMOTION) {
+                float scaleX, scaleY;
+                SDL_RenderGetScale(renderer, &scaleX, &scaleY);
+                mousePos.x = event.motion.x / scaleX;
+                mousePos.y = event.motion.y / scaleY;
+                realMousePos.x = event.motion.x;
+                realMousePos.y = event.motion.y;
+                if (SDL_PointInFRect(&mousePos, &playAgainText.dstR)) {
+                    playAgainText.setText(renderer, robotoF, "Play again", { 255, 0, 0 });
+                }
+                else {
+                    playAgainText.setText(renderer, robotoF, "Play again");
+                }
+            }
+        }
+        SDL_SetRenderDrawColor(renderer, 82, 71, 55, 0);
+        SDL_RenderClear(renderer);
+        RenderStorage(storageContainer, storageHoverText, storageTitleText, storage, storageInvenPlaceholder, foods);
+        SDL_RenderPresent(renderer);
+        }
+
         saveData(scoreText, rotDelayInMs, isMuted, maxEnergy);
     }
     // TODO: On mobile remember to use eventWatch function (it doesn't reach this code when terminating)

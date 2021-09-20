@@ -69,7 +69,7 @@ using namespace std::chrono_literals;
 #define SUNSET_HOUR_BEGIN 7
 #define SUNSET_HOUR_END 17
 #define MAX_ENERGY_INIT 10
-#define PLAYER_SPEED 0.1
+#define INIT_PLAYER_SPEED 0.1
 #define MAX_TREES 3
 #define SCREEN_PADDING 50
 #define EPSILON 0.001
@@ -1090,7 +1090,7 @@ void RenderHome(SDL_FRect homeGround,
     Text& actionText,
     Interactable& currentAction,
     bool& shouldShowInfoText,
-    Text& infoText,
+    Text& infoTextAboutNotEnoughEnergy,
     bool& shouldShowWhenCanSleepAndGoShop,
     Text& canSleepAndGoShopText,
     Text scoreText,
@@ -1183,7 +1183,7 @@ void RenderHome(SDL_FRect homeGround,
 
     RenderUI(scoreText, isMuted, soundBtnR, hourText, energyText, hour, sunR, energyR, playerDirection, playerAnimationFrames, playerAnimationFrame, player, isMoving, playerAnimationClock, hungerText, inventorySlotR, inventorySlot2R, foods, inventorySlotXR, inventorySlotX2R);
     if (shouldShowInfoText) {
-        infoText.draw(renderer);
+        infoTextAboutNotEnoughEnergy.draw(renderer);
     }
     if (shouldShowWhenCanSleepAndGoShop) {
         canSleepAndGoShopText.draw(renderer);
@@ -1421,6 +1421,17 @@ shuffleBegin:
     }
 }
 
+void addBonusForFood(std::array<Food, 2>& foods, Text& energyText,float &playerSpeed, Clock& increasedPlayerClockSpeed)
+{
+    if (foods[0] == Food::Apple || foods[0] == Food::Banana || foods[0] == Food::Grape) {
+        energyText.setText(renderer, robotoF, std::stoi(energyText.text) + 5);
+    }
+    else if (foods[0] == Food::Carrot || foods[0] == Food::Pumpkin || foods[0] == Food::Potato) {
+        playerSpeed = INIT_PLAYER_SPEED * 2;
+        increasedPlayerClockSpeed.restart();
+    }
+}
+
 int main(int argc, char* argv[])
 {
     std::srand(std::time(0));
@@ -1552,8 +1563,8 @@ gameBegin:
     Interactable bedI{};
     Interactable chestI{};
     bool exitedHome = false;
-    Text infoText;
-    bool shouldShowInfoText = false;
+    Text infoTextAboutNotEnoughEnergy;
+    bool shouldShowInfoTextAboutNotEnoughEnergy = false;
     Text cantCollectText;
     bool canCollect = true;
     Text canSleepAndGoShopText;
@@ -1584,6 +1595,8 @@ gameBegin:
     Text storageHoverText;
     std::vector<StorageUI> storage;
     std::vector<SDL_FRect> storageInvenPlaceholder;
+    float playerSpeed = INIT_PLAYER_SPEED;
+    Clock increasedPlayerSpeedClock;
 
     loadMap("res/map.tmx", mapWidth, mapHeight, tiles, plots, houseR);
     soundBtnR.w = 48;
@@ -1687,11 +1700,11 @@ gameBegin:
     inventorySlotXR.y = inventorySlotR.y - inventorySlotXR.h;
     inventorySlotX2R = inventorySlotXR;
     inventorySlotX2R.x = inventorySlot2R.x - inventorySlotX2R.w / 2;
-    infoText.setText(renderer, robotoF, "You don't have enough energy to leave", { WARNING_COLOR });
-    infoText.dstR.w = 400;
-    infoText.dstR.h = 40;
-    infoText.dstR.x = windowWidth / 2 - infoText.dstR.w / 2;
-    infoText.dstR.y = windowHeight / 2.0f - infoText.dstR.h / 2.0f;
+    infoTextAboutNotEnoughEnergy.setText(renderer, robotoF, "You don't have enough energy to leave", { WARNING_COLOR });
+    infoTextAboutNotEnoughEnergy.dstR.w = 400;
+    infoTextAboutNotEnoughEnergy.dstR.h = 40;
+    infoTextAboutNotEnoughEnergy.dstR.x = windowWidth / 2 - infoTextAboutNotEnoughEnergy.dstR.w / 2;
+    infoTextAboutNotEnoughEnergy.dstR.y = windowHeight / 2.0f - infoTextAboutNotEnoughEnergy.dstR.h / 2.0f;
     cantCollectText.setText(renderer, robotoF, "You can't collect in the night");
     cantCollectText.dstR.w = 180;
     cantCollectText.dstR.h = 40;
@@ -1748,6 +1761,7 @@ gameBegin:
     pumpkinClock.restart();
     playerAnimationClock.restart();
     hungerClock.restart();
+    increasedPlayerSpeedClock.restart();
     readData(scoreText, rotDelayInMs, isMuted, maxEnergy, energyText);
     while (running) {
         float deltaTime = globalClock.restart();
@@ -1895,12 +1909,14 @@ gameBegin:
                     if (event.button.button == SDL_BUTTON_RIGHT) {
                         if (SDL_PointInFRect(&mousePos, &inventorySlotR)) {
                             if (foods[0] != Food::Empty) {
+                                addBonusForFood(foods, energyText,playerSpeed,increasedPlayerSpeedClock);
                                 foods[0] = Food::Empty;
                                 hungerText.setText(renderer, robotoF, std::stoi(hungerText.text) + 50 > 100 ? 100 : std::stoi(hungerText.text) + 50);
                             }
                         }
                         if (SDL_PointInFRect(&mousePos, &inventorySlot2R)) {
                             if (foods[1] != Food::Empty) {
+                                addBonusForFood(foods, energyText,playerSpeed, increasedPlayerSpeedClock);
                                 foods[1] = Food::Empty;
                                 hungerText.setText(renderer, robotoF, std::stoi(hungerText.text) + 50 > 100 ? 100 : std::stoi(hungerText.text) + 50);
                             }
@@ -1956,16 +1972,16 @@ gameBegin:
             player.dy = 0;
             if (shouldGoHome) {
                 if (player.r.x + player.r.w < houseR.x) {
-                    player.r.x += PLAYER_SPEED * deltaTime;
+                    player.r.x += playerSpeed * deltaTime;
                 }
                 else if (player.r.x > houseR.x + houseR.w) {
-                    player.r.x += -PLAYER_SPEED * deltaTime;
+                    player.r.x += -playerSpeed * deltaTime;
                 }
                 if (player.r.y + player.r.h < houseR.y) {
-                    player.r.y += PLAYER_SPEED * deltaTime;
+                    player.r.y += playerSpeed * deltaTime;
                 }
                 else if (player.r.y > houseR.y + houseR.h) {
-                    player.r.y += -PLAYER_SPEED * deltaTime;
+                    player.r.y += -playerSpeed * deltaTime;
                 }
             }
             else {
@@ -2019,8 +2035,8 @@ gameBegin:
                     energyClock.restart();
                 }
             }
-            player.r.x += player.dx * deltaTime * PLAYER_SPEED;
-            player.r.y += player.dy * deltaTime * PLAYER_SPEED;
+            player.r.x += player.dx * deltaTime * playerSpeed;
+            player.r.y += player.dy * deltaTime * playerSpeed;
             if (SDL_HasIntersectionF(&houseR, &player.r)) {
                 if (!exitedHome) {
                     exitedHome = true;
@@ -2046,6 +2062,9 @@ gameBegin:
                     }
                 }
                 hungerClock.restart();
+            }
+            if (increasedPlayerSpeedClock.getElapsedTime()> 1000) {
+                playerSpeed = INIT_PLAYER_SPEED;
             }
             SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
             SDL_RenderClear(renderer);
@@ -2191,7 +2210,7 @@ gameBegin:
                 if (event.type == SDL_KEYDOWN) {
                     keys[event.key.keysym.scancode] = true;
                     shouldShowWhenCanSleepAndGoShop = false;
-                    shouldShowInfoText = false;
+                    shouldShowInfoTextAboutNotEnoughEnergy = false;
                     if (event.key.keysym.scancode == SDL_SCANCODE_SPACE) {
                         if (SDL_HasIntersectionF(&player.r, &shopI.dstR)) {
                             if (hour >= 0 && hour < 7 || hour > 17) {
@@ -2213,7 +2232,7 @@ gameBegin:
                                 Mix_PlayChannel(-1, doorS, 0);
                             }
                             else {
-                                shouldShowInfoText = true;
+                                shouldShowInfoTextAboutNotEnoughEnergy = true;
                             }
                         }
                         else if (SDL_HasIntersectionF(&player.r, &bedI.dstR)) {
@@ -2221,9 +2240,9 @@ gameBegin:
                                 shouldShowWhenCanSleepAndGoShop = false;
                                 hour = 7;
                                 hourText.setText(renderer, robotoF, std::to_string(hour) + "am");
-                                energyText.setText(renderer, robotoF, maxEnergy);
+                                energyText.setText(renderer, robotoF, maxEnergy > std::stoi(energyText.text) ? maxEnergy : std::stoi(energyText.text));
                                 shouldGoHome = false;
-                                shouldShowInfoText = false;
+                                shouldShowInfoTextAboutNotEnoughEnergy = false;
                                 Mix_PlayChannel(-1, sleepS, 0);
                             }
                             else {
@@ -2297,8 +2316,8 @@ gameBegin:
                 player.dy = 1;
                 playerDirection = PlayerDirection::Down;
             }
-            player.r.x += player.dx * deltaTime * PLAYER_SPEED;
-            player.r.y += player.dy * deltaTime * PLAYER_SPEED;
+            player.r.x += player.dx * deltaTime * playerSpeed;
+            player.r.y += player.dy * deltaTime * playerSpeed;
             player.r.x = clamp(player.r.x, homeGround.x - 20, homeGround.x + homeGround.w - player.r.w + 20);
             player.r.y = clamp(player.r.y, homeGround.y + 10, homeGround.y + homeGround.h - player.r.h);
             if (SDL_HasIntersectionF(&player.r, &doorR)) {
@@ -2345,10 +2364,13 @@ gameBegin:
                 }
                 hungerClock.restart();
             }
+            if (increasedPlayerSpeedClock.getElapsedTime() > 1000) {
+                playerSpeed = INIT_PLAYER_SPEED;
+            }
             SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
             SDL_RenderClear(renderer);
             RenderHome(homeGround, tile, homeWall, homeSeparator, hour, windowR, bedI, doorI, shopI, chestI,
-                actionText, currentAction, shouldShowInfoText, infoText, shouldShowWhenCanSleepAndGoShop, canSleepAndGoShopText, scoreText, isMuted,
+                actionText, currentAction, shouldShowInfoTextAboutNotEnoughEnergy, infoTextAboutNotEnoughEnergy, shouldShowWhenCanSleepAndGoShop, canSleepAndGoShopText, scoreText, isMuted,
                 soundBtnR, hourText, energyText, sunR, energyR, playerDirection, playerAnimationFrames, playerAnimationFrame, player, isMoving,
                 playerAnimationClock, hungerText, inventorySlotR, inventorySlot2R, foods, inventorySlotXR, inventorySlotX2R);
             SDL_RenderPresent(renderer);

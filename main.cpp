@@ -766,7 +766,8 @@ struct StorageUI {
     bool isChest;
     Food foodType;
 
-    void init(SDL_FRect r, Food foodType, bool isChest = true) {
+    void init(SDL_FRect r, Food foodType, bool isChest = true)
+    {
         container = r;
 
         imgContainer.w = container.w * 0.9f;
@@ -783,7 +784,8 @@ struct StorageUI {
         this->isChest = isChest;
     }
 
-    void draw(SDL_Renderer* renderer) {
+    void draw(SDL_Renderer* renderer)
+    {
         SDL_SetRenderDrawColor(renderer, 255, 255, 255, SDL_ALPHA_OPAQUE);
         SDL_RenderDrawRectF(renderer, &container);
         if (foodType != Food::Empty) {
@@ -794,9 +796,9 @@ struct StorageUI {
         }
     }
 
-    std::string getFoodName() {
-        switch (foodType)
-        {
+    std::string getFoodName()
+    {
+        switch (foodType) {
         case Food::Apple:
             return "Apple";
         case Food::Banana:
@@ -1015,16 +1017,16 @@ int ClosestNumber(int total, int size)
     return nextClosest;
 }
 
-void HomeInit(SDL_FRect& tile, 
-    SDL_FRect& homeGround, 
-    SDL_FRect& homeWall, 
-    SDL_FRect& homeSeparator, 
-    SDL_FRect& windowR, 
-    Interactable& doorI, 
-    Interactable& shopI, 
-    Player& player, 
-    Interactable& bedI, 
-    Interactable& chestI, 
+void HomeInit(SDL_FRect& tile,
+    SDL_FRect& homeGround,
+    SDL_FRect& homeWall,
+    SDL_FRect& homeSeparator,
+    SDL_FRect& windowR,
+    Interactable& doorI,
+    Interactable& shopI,
+    Player& player,
+    Interactable& bedI,
+    Interactable& chestI,
     Text& actionText)
 {
     tile.w = 32;
@@ -1241,7 +1243,7 @@ void RenderStorage(SDL_FRect& container,
     Text& titleText,
     std::vector<StorageUI>& storage,
     std::vector<SDL_FRect>& storageInventory,
-    std::array<Food, 2> foods) 
+    std::array<Food, 2> foods)
 {
     SDL_SetRenderDrawColor(renderer, 0, 0, 0, SDL_ALPHA_OPAQUE);
     SDL_RenderFillRectF(renderer, &container);
@@ -1408,11 +1410,11 @@ shuffleBegin:
             if (SDL_HasIntersectionF(&r1, &r2)) {
                 goto shuffleBegin;
             }
-            else if (r1.x < 0 || r1.y < 0 || r2.x < 0 || r2.y < 0
-                || r1.x + r1.w > windowWidth  || r1.y + r1.h > windowHeight || r2.x + r2.w > windowWidth || r2.y + r2.h > windowHeight ) {
+            if (r1.x < 0 || r1.y < 0 || r2.x < 0 || r2.y < 0
+                || r1.x + r1.w > windowWidth || r1.y + r1.h > windowHeight || r2.x + r2.w > windowWidth || r2.y + r2.h > windowHeight) {
                 goto shuffleBegin;
             }
-            else if (SDL_HasIntersectionF(&r1,&houseR) || SDL_HasIntersectionF(&r2,&houseR)) {
+            if (SDL_HasIntersectionF(&r1, &houseR) || SDL_HasIntersectionF(&r2, &houseR)) {
                 goto shuffleBegin;
             }
         }
@@ -1583,7 +1585,7 @@ gameBegin:
     std::vector<StorageUI> storage;
     std::vector<SDL_FRect> storageInvenPlaceholder;
 
-    loadMap("res/map.tmx", mapWidth, mapHeight, tiles, plots,houseR);
+    loadMap("res/map.tmx", mapWidth, mapHeight, tiles, plots, houseR);
     soundBtnR.w = 48;
     soundBtnR.h = 48;
     soundBtnR.x = windowWidth - soundBtnR.w - 20;
@@ -1889,6 +1891,20 @@ gameBegin:
                     }
                     if (SDL_PointInFRect(&mousePos, &inventorySlotX2R)) {
                         foods[1] = Food::Empty;
+                    }
+                    if (event.button.button == SDL_BUTTON_RIGHT) {
+                        if (SDL_PointInFRect(&mousePos, &inventorySlotR)) {
+                            if (foods[0] != Food::Empty) {
+                                foods[0] = Food::Empty;
+                                hungerText.setText(renderer, robotoF, std::stoi(hungerText.text) + 50 > 100 ? 100 : std::stoi(hungerText.text) + 50);
+                            }
+                        }
+                        if (SDL_PointInFRect(&mousePos, &inventorySlot2R)) {
+                            if (foods[1] != Food::Empty) {
+                                foods[1] = Food::Empty;
+                                hungerText.setText(renderer, robotoF, std::stoi(hungerText.text) + 50 > 100 ? 100 : std::stoi(hungerText.text) + 50);
+                            }
+                        }
                     }
                 }
                 if (event.type == SDL_MOUSEBUTTONUP) {
@@ -2458,49 +2474,49 @@ gameBegin:
             SDL_RenderPresent(renderer);
         }
         else if (state == State::Storage) {
-        SDL_Event event;
-        while (SDL_PollEvent(&event)) {
-            if (event.type == SDL_QUIT || event.type == SDL_KEYDOWN && event.key.keysym.scancode == SDL_SCANCODE_ESCAPE) {
-                running = false;
-                // TODO: On mobile remember to use eventWatch function (it doesn't reach this code when terminating)
-            }
-            if (event.type == SDL_WINDOWEVENT && event.window.event == SDL_WINDOWEVENT_RESIZED) {
-                SDL_RenderSetScale(renderer, event.window.data1 / (float)windowWidth, event.window.data2 / (float)windowHeight);
-            }
-            if (event.type == SDL_KEYDOWN) {
-                keys[event.key.keysym.scancode] = true;
-            }
-            if (event.type == SDL_KEYUP) {
-                keys[event.key.keysym.scancode] = false;
-            }
-            if (event.type == SDL_MOUSEBUTTONDOWN) {
-                buttons[event.button.button] = true;
-                if (SDL_PointInFRect(&mousePos, &playAgainText.dstR)) {
-                    goto gameBegin;
+            SDL_Event event;
+            while (SDL_PollEvent(&event)) {
+                if (event.type == SDL_QUIT || event.type == SDL_KEYDOWN && event.key.keysym.scancode == SDL_SCANCODE_ESCAPE) {
+                    running = false;
+                    // TODO: On mobile remember to use eventWatch function (it doesn't reach this code when terminating)
+                }
+                if (event.type == SDL_WINDOWEVENT && event.window.event == SDL_WINDOWEVENT_RESIZED) {
+                    SDL_RenderSetScale(renderer, event.window.data1 / (float)windowWidth, event.window.data2 / (float)windowHeight);
+                }
+                if (event.type == SDL_KEYDOWN) {
+                    keys[event.key.keysym.scancode] = true;
+                }
+                if (event.type == SDL_KEYUP) {
+                    keys[event.key.keysym.scancode] = false;
+                }
+                if (event.type == SDL_MOUSEBUTTONDOWN) {
+                    buttons[event.button.button] = true;
+                    if (SDL_PointInFRect(&mousePos, &playAgainText.dstR)) {
+                        goto gameBegin;
+                    }
+                }
+                if (event.type == SDL_MOUSEBUTTONUP) {
+                    buttons[event.button.button] = false;
+                }
+                if (event.type == SDL_MOUSEMOTION) {
+                    float scaleX, scaleY;
+                    SDL_RenderGetScale(renderer, &scaleX, &scaleY);
+                    mousePos.x = event.motion.x / scaleX;
+                    mousePos.y = event.motion.y / scaleY;
+                    realMousePos.x = event.motion.x;
+                    realMousePos.y = event.motion.y;
+                    if (SDL_PointInFRect(&mousePos, &playAgainText.dstR)) {
+                        playAgainText.setText(renderer, robotoF, "Play again", { 255, 0, 0 });
+                    }
+                    else {
+                        playAgainText.setText(renderer, robotoF, "Play again");
+                    }
                 }
             }
-            if (event.type == SDL_MOUSEBUTTONUP) {
-                buttons[event.button.button] = false;
-            }
-            if (event.type == SDL_MOUSEMOTION) {
-                float scaleX, scaleY;
-                SDL_RenderGetScale(renderer, &scaleX, &scaleY);
-                mousePos.x = event.motion.x / scaleX;
-                mousePos.y = event.motion.y / scaleY;
-                realMousePos.x = event.motion.x;
-                realMousePos.y = event.motion.y;
-                if (SDL_PointInFRect(&mousePos, &playAgainText.dstR)) {
-                    playAgainText.setText(renderer, robotoF, "Play again", { 255, 0, 0 });
-                }
-                else {
-                    playAgainText.setText(renderer, robotoF, "Play again");
-                }
-            }
-        }
-        SDL_SetRenderDrawColor(renderer, 82, 71, 55, 0);
-        SDL_RenderClear(renderer);
-        RenderStorage(storageContainer, storageHoverText, storageTitleText, storage, storageInvenPlaceholder, foods);
-        SDL_RenderPresent(renderer);
+            SDL_SetRenderDrawColor(renderer, 82, 71, 55, 0);
+            SDL_RenderClear(renderer);
+            RenderStorage(storageContainer, storageHoverText, storageTitleText, storage, storageInvenPlaceholder, foods);
+            SDL_RenderPresent(renderer);
         }
 
         saveData(scoreText, rotDelayInMs, isMuted, maxEnergy);

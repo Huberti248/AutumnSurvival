@@ -1253,9 +1253,16 @@ void RenderStorage(SDL_FRect& container,
         s.draw(renderer);
     }
     for (int i = 0; i < storageInventory.size(); i++) {
-        StorageUI uiInventory{};
-        uiInventory.init(storageInventory[i], foods[i], false);
-        uiInventory.draw(renderer);
+        SDL_SetRenderDrawColor(renderer, 255, 255, 255, SDL_ALPHA_OPAQUE);
+        SDL_RenderDrawRectF(renderer, &storageInventory[i]);
+        if (foods[i] != Food::Empty) {
+            SDL_FRect imgContainer;
+            imgContainer.w = storageInventory[i].w * 0.9f;
+            imgContainer.h = storageInventory[i].h * 0.9f;
+            imgContainer.x = storageInventory[i].x + storageInventory[i].w / 2.0f - imgContainer.w / 2.0f;
+            imgContainer.y = storageInventory[i].y + storageInventory[i].h / 2.0f - imgContainer.h / 2.0f;
+            SDL_RenderCopyF(renderer, GetFoodTexture(foods[i]), 0, &imgContainer);
+        }
     }
 }
 
@@ -1421,7 +1428,7 @@ shuffleBegin:
     }
 }
 
-void addBonusForFood(std::array<Food, 2>& foods, Text& energyText,float &playerSpeed, Clock& increasedPlayerClockSpeed)
+void addBonusForFood(std::array<Food, 2>& foods, Text& energyText, float& playerSpeed, Clock& increasedPlayerClockSpeed)
 {
     if (foods[0] == Food::Apple || foods[0] == Food::Banana || foods[0] == Food::Grape) {
         energyText.setText(renderer, robotoF, std::stoi(energyText.text) + 5);
@@ -1597,8 +1604,12 @@ gameBegin:
     std::vector<SDL_FRect> storageInvenPlaceholder;
     float playerSpeed = INIT_PLAYER_SPEED;
     Clock increasedPlayerSpeedClock;
+    SDL_FRect xBtnR;
+    xBtnR.w = 32;
+    xBtnR.h = 32;
+    xBtnR.x = 15;
+    xBtnR.y = 15;
 
-    loadMap("res/map.tmx", mapWidth, mapHeight, tiles, plots, houseR);
     soundBtnR.w = 48;
     soundBtnR.h = 48;
     soundBtnR.x = windowWidth - soundBtnR.w - 20;
@@ -1744,6 +1755,7 @@ gameBegin:
     playAgainText.dstR.h = 40;
     playAgainText.dstR.x = windowWidth / 2 - playAgainText.dstR.w / 2;
     playAgainText.dstR.y = gameOverText.dstR.y + gameOverText.dstR.h;
+    loadMap("res/map.tmx", mapWidth, mapHeight, tiles, plots, houseR);
     HomeInit(tile, homeGround, homeWall, homeSeparator, windowR, doorI, shopI, player, bedI, chestI, actionText);
     StorageInit(storageContainer, storageHoverText, storageTitleText, storage, storageInvenPlaceholder);
     for (auto& food : foods) {
@@ -1909,14 +1921,14 @@ gameBegin:
                     if (event.button.button == SDL_BUTTON_RIGHT) {
                         if (SDL_PointInFRect(&mousePos, &inventorySlotR)) {
                             if (foods[0] != Food::Empty) {
-                                addBonusForFood(foods, energyText,playerSpeed,increasedPlayerSpeedClock);
+                                addBonusForFood(foods, energyText, playerSpeed, increasedPlayerSpeedClock);
                                 foods[0] = Food::Empty;
                                 hungerText.setText(renderer, robotoF, std::stoi(hungerText.text) + 50 > 100 ? 100 : std::stoi(hungerText.text) + 50);
                             }
                         }
                         if (SDL_PointInFRect(&mousePos, &inventorySlot2R)) {
                             if (foods[1] != Food::Empty) {
-                                addBonusForFood(foods, energyText,playerSpeed, increasedPlayerSpeedClock);
+                                addBonusForFood(foods, energyText, playerSpeed, increasedPlayerSpeedClock);
                                 foods[1] = Food::Empty;
                                 hungerText.setText(renderer, robotoF, std::stoi(hungerText.text) + 50 > 100 ? 100 : std::stoi(hungerText.text) + 50);
                             }
@@ -2063,7 +2075,7 @@ gameBegin:
                 }
                 hungerClock.restart();
             }
-            if (increasedPlayerSpeedClock.getElapsedTime()> 1000) {
+            if (increasedPlayerSpeedClock.getElapsedTime() > 1000) {
                 playerSpeed = INIT_PLAYER_SPEED;
             }
             SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
@@ -2328,6 +2340,7 @@ gameBegin:
                 scoreGain.push_back(random(1, 10));
             }
 
+#if 0
             for (int i = 0; i < foods.size(); ++i) {
                 if (foods[i] == Food::Apple) {
                     foods[i] = Food::Empty;
@@ -2354,6 +2367,7 @@ gameBegin:
                     scoreText.setText(renderer, robotoF, std::stoi(scoreText.text) + scoreGain[(int)(Food::Pumpkin)]);
                 }
             }
+#endif
             moveTimeByOneHour(timeClock, hour, hourText);
             if (hungerClock.getElapsedTime() > HUNGER_DECREASE_DELAY_IN_MS) {
                 if (std::stoi(hungerText.text) > 0) {
@@ -2513,8 +2527,36 @@ gameBegin:
                 }
                 if (event.type == SDL_MOUSEBUTTONDOWN) {
                     buttons[event.button.button] = true;
-                    if (SDL_PointInFRect(&mousePos, &playAgainText.dstR)) {
-                        goto gameBegin;
+                    if (SDL_PointInFRect(&mousePos, &xBtnR)) {
+                        state = State::Home;
+                    }
+                    if (event.button.button == SDL_BUTTON_LEFT) {
+                        for (int i = 0; i < storageInvenPlaceholder.size(); ++i) {
+                            if (SDL_PointInFRect(&mousePos, &storageInvenPlaceholder[i])) {
+                                for (int j = 0; j < storage.size(); ++j) {
+                                    if (storage[j].foodType == foods[i]) {
+                                        ++storage[j].amount;
+                                        foods[i] = Food::Empty;
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                        for (int i = 0; i < storage.size(); ++i) {
+                            if (SDL_PointInFRect(&mousePos, &storage[i].container)) {
+                                if (storage[i].amount) {
+                                    if (foods[0] == Food::Empty) {
+                                        foods[0] = storage[i].foodType;
+                                        --storage[i].amount;
+                                    }
+                                    else if (foods[1] == Food::Empty) {
+                                        foods[1] = storage[i].foodType;
+                                        --storage[i].amount;
+                                    }
+                                }
+                                break;
+                            }
+                        }
                     }
                 }
                 if (event.type == SDL_MOUSEBUTTONUP) {
@@ -2527,17 +2569,12 @@ gameBegin:
                     mousePos.y = event.motion.y / scaleY;
                     realMousePos.x = event.motion.x;
                     realMousePos.y = event.motion.y;
-                    if (SDL_PointInFRect(&mousePos, &playAgainText.dstR)) {
-                        playAgainText.setText(renderer, robotoF, "Play again", { 255, 0, 0 });
-                    }
-                    else {
-                        playAgainText.setText(renderer, robotoF, "Play again");
-                    }
                 }
             }
             SDL_SetRenderDrawColor(renderer, 82, 71, 55, 0);
             SDL_RenderClear(renderer);
             RenderStorage(storageContainer, storageHoverText, storageTitleText, storage, storageInvenPlaceholder, foods);
+            SDL_RenderCopyF(renderer, xT, 0, &xBtnR);
             SDL_RenderPresent(renderer);
         }
 

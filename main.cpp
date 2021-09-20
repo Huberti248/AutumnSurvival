@@ -78,15 +78,17 @@ using namespace std::chrono_literals;
 #define PART_SPEED 0.1
 #define HUNGER_DECREASE_DELAY_IN_MS 1000
 
-#define HOME_BUTTON_SELECTED \
+#define BUTTON_SELECTED \
     {                        \
         242, 182, 61, 255    \
     }
-#define HOME_BUTTON_UNSELECTED \
+#define BUTTON_UNSELECTED \
     {                          \
         209, 180, 140, 255     \
     }
 #define LETTER_WIDTH 25
+#define PAUSE_NUM_OPTIONS 3
+#define PAUSE_MENU_BUTTON_PADDING 15
 
 int windowWidth = 800;
 int windowHeight = 600;
@@ -697,7 +699,8 @@ enum class State {
     Home,
     Minigame,
     Gameover,
-    Storage
+    Storage,
+    Paused
 };
 
 struct Shop {
@@ -814,6 +817,55 @@ struct StorageUI {
         }
     }
 };
+
+enum class MenuOption {
+    Play = 1,
+    Resume,
+    Restart,
+    Controls,
+    Highscores,
+    Main,
+    Credits,
+    Quit
+};
+
+struct MenuButton {
+    MenuOption menuType;
+    Text buttonText;
+    std::string label;
+    bool selected;
+
+    void calculateButtonPosition(
+        const int index,
+        const int numButtons,
+        const float width,
+        const float height,
+        float paddingVertical) {
+
+        buttonText.dstR.x = width / 2.0f - buttonText.dstR.w / 2.0f;
+        buttonText.dstR.y = height / 2.0f - numButtons * (buttonText.dstR.h / 2.0f + paddingVertical) + (index + 0.5f) * (buttonText.dstR.h + paddingVertical);
+    }
+};
+
+void HandleMenuOption(MenuOption option, State& gameState, State& pausedState, bool& gameRunning)
+{
+    switch (option) {
+    case MenuOption::Play:
+        break;
+    case MenuOption::Credits:
+        break;
+    case MenuOption::Resume:
+        gameState = pausedState;
+        break;
+    case MenuOption::Controls:
+        break;
+    case MenuOption::Main:
+        break;
+    case MenuOption::Quit:
+        gameRunning = false;
+        break;
+    }
+}
 
 enum class PlayerDirection {
     Left,
@@ -1264,6 +1316,57 @@ void RenderStorage(SDL_FRect& container,
     }
 }
 
+void PauseInit(SDL_FRect& container,
+    Text& titleText,
+    MenuButton options[],
+    const std::string labels[],
+    const MenuOption menuTypes[])
+{
+    // Setup background and title
+    container.w = windowWidth;
+    container.h = windowHeight;
+    container.x = windowWidth / 2.0f - container.w / 2.0f;
+    container.y = 0;
+
+    titleText.dstR.w = container.w - SCREEN_PADDING * 2;
+    titleText.dstR.h = 100;
+    titleText.dstR.x = windowWidth / 2.0f - titleText.dstR.w / 2.0f;
+    titleText.dstR.y = SCREEN_PADDING;
+    titleText.setText(renderer, robotoF, "Paused", { 255, 0, 0 });
+
+    // Setup buttons
+    for (int i = 0; i < PAUSE_NUM_OPTIONS; ++i) {
+        options[i].label = labels[i];
+        options[i].menuType = menuTypes[i];
+        options[i].selected = false;
+        options[i].buttonText.dstR.w = strlen(options[i].label.c_str()) * LETTER_WIDTH;
+        options[i].buttonText.dstR.h = 50;
+        options[i].calculateButtonPosition(i, PAUSE_NUM_OPTIONS, windowWidth, windowHeight, PAUSE_MENU_BUTTON_PADDING);
+        options[i].buttonText.dstR.y += titleText.dstR.h;
+        options[i].buttonText.setText(renderer, robotoF, options[i].label, BUTTON_UNSELECTED);
+    }
+}
+
+void RenderPauseMenu(SDL_FRect& container,
+    Text& titleText,
+    MenuButton options[]) 
+{
+    SDL_SetRenderDrawColor(renderer, 20, 20, 30, 200);
+    SDL_RenderFillRectF(renderer, &container);
+    titleText.draw(renderer);
+
+    for (int i = 0; i < PAUSE_NUM_OPTIONS; ++i) {
+        if (options[i].selected) {
+            options[i].buttonText.setText(renderer, robotoF, options[i].label, BUTTON_SELECTED);
+        }
+        else {
+            options[i].buttonText.setText(renderer, robotoF, options[i].label, BUTTON_UNSELECTED);
+        }
+
+        options[i].buttonText.draw(renderer);
+    }
+}
+
 void moveTimeByOneHour(Clock& timeClock, int& hour, Text& hourText)
 {
     if (timeClock.getElapsedTime() > 1000) {
@@ -1547,6 +1650,7 @@ gameBegin:
     Text scoreText;
     Shop shop;
     State state = State::Intro;
+    State pausedState = state;
     Clock rotClock;
     int rotDelayInMs = ROT_INIT_DELAY_IN_MS;
     Music currentMusic = Music::JosephKosma;
@@ -1620,6 +1724,33 @@ gameBegin:
     std::vector<SDL_FRect> storageInvenPlaceholder;
     float playerSpeed = INIT_PLAYER_SPEED;
     Clock increasedPlayerSpeedClock;
+    MenuButton pauseOptions[PAUSE_NUM_OPTIONS];
+    const std::string pauseLabels[PAUSE_NUM_OPTIONS] = {
+        "Resume",
+        "Return to Main Menu",
+        "Quit to Desktop"
+    };
+    const MenuOption pauseMenuTypes[PAUSE_NUM_OPTIONS] = {
+        MenuOption::Resume,
+        MenuOption::Main,
+        MenuOption::Quit
+    };
+    Text pauseTitleText;
+    SDL_FRect pauseContainer;
+    MenuButton mainOptions[PAUSE_NUM_OPTIONS];
+    const std::string mainLabels[PAUSE_NUM_OPTIONS] = {
+        "Resume",
+        "Return to Main Menu",
+        "Quit to Desktop"
+    };
+    const MenuOption mainMenuTypes[PAUSE_NUM_OPTIONS] = {
+        MenuOption::Resume,
+        MenuOption::Main,
+        MenuOption::Quit
+    };
+    Text mainTitleText;
+    SDL_FRect mainContainer;
+    bool pauseKeyPressed = false;
     SDL_FRect xBtnR;
     xBtnR.w = 32;
     xBtnR.h = 32;
@@ -1774,6 +1905,7 @@ gameBegin:
     loadMap("res/map.tmx", mapWidth, mapHeight, tiles, plots, houseR);
     HomeInit(tile, homeGround, homeWall, homeSeparator, windowR, doorI, shopI, player, bedI, chestI, actionText);
     StorageInit(storageContainer, storageHoverText, storageTitleText, storage, storageInvenPlaceholder);
+    PauseInit(pauseContainer, pauseTitleText, pauseOptions, pauseLabels, pauseMenuTypes);
     for (auto& food : foods) {
         food = Food::Empty;
     }
@@ -1811,7 +1943,7 @@ gameBegin:
         if (state == State::Intro) {
             SDL_Event event;
             while (SDL_PollEvent(&event)) {
-                if (event.type == SDL_QUIT || event.type == SDL_KEYDOWN && event.key.keysym.scancode == SDL_SCANCODE_ESCAPE) {
+                if (event.type == SDL_QUIT) {
                     running = false;
                     // TODO: On mobile remember to use eventWatch function (it doesn't reach this code when terminating)
                 }
@@ -1819,10 +1951,26 @@ gameBegin:
                     SDL_RenderSetScale(renderer, event.window.data1 / (float)windowWidth, event.window.data2 / (float)windowHeight);
                 }
                 if (event.type == SDL_KEYDOWN) {
-                    keys[event.key.keysym.scancode] = true;
+                    if (event.key.keysym.scancode == SDL_SCANCODE_ESCAPE) {
+                        if (!pauseKeyPressed) {
+                            pausedState = state;
+                            pauseKeyPressed = true;
+                            state = State::Paused;
+                        }
+                    }
+                    else {
+                        keys[event.key.keysym.scancode] = true;
+                    }
                 }
                 if (event.type == SDL_KEYUP) {
-                    keys[event.key.keysym.scancode] = false;
+                    if (event.key.keysym.scancode == SDL_SCANCODE_ESCAPE) {
+                        if (pauseKeyPressed) {
+                            pauseKeyPressed = false;
+                        }
+                    }
+                    else {
+                        keys[event.key.keysym.scancode] = false;
+                    }
                 }
                 if (event.type == SDL_MOUSEBUTTONDOWN) {
                     buttons[event.button.button] = true;
@@ -1863,7 +2011,7 @@ gameBegin:
         else if (state == State::Outside) {
             SDL_Event event;
             while (SDL_PollEvent(&event)) {
-                if (event.type == SDL_QUIT || event.type == SDL_KEYDOWN && event.key.keysym.scancode == SDL_SCANCODE_ESCAPE) {
+                if (event.type == SDL_QUIT) {
                     running = false;
                     // TODO: On mobile remember to use eventWatch function (it doesn't reach this code when terminating)
                 }
@@ -1871,51 +2019,67 @@ gameBegin:
                     SDL_RenderSetScale(renderer, event.window.data1 / (float)windowWidth, event.window.data2 / (float)windowHeight);
                 }
                 if (event.type == SDL_KEYDOWN) {
-                    keys[event.key.keysym.scancode] = true;
-                    if (event.key.keysym.scancode == SDL_SCANCODE_SPACE) {
-                        if (hour >= 7 && hour <= 17) {
-                            canCollect = true;
-                            if (foods[0] == Food::Empty || foods[1] == Food::Empty) {
-                                int index = foods[0] == Food::Empty ? 0 : 1;
-                                for (auto& plot : plots) {
-                                    if (plot.isIntersecting(player.r)) {
-                                        state = State::Minigame;
-                                        if (plot.food == Food::Apple) {
-                                            currentPartT = appleT;
-                                        }
-                                        else if (plot.food == Food::Banana) {
-                                            currentPartT = bananaT;
-                                        }
-                                        else if (plot.food == Food::Carrot) {
-                                            currentPartT = carrotT;
-                                        }
-                                        else if (plot.food == Food::Grape) {
-                                            currentPartT = grapeT;
-                                        }
-                                        else if (plot.food == Food::Potato) {
-                                            currentPartT = potatoT;
-                                        }
-                                        else if (plot.food == Food::Pumpkin) {
-                                            currentPartT = pumpkinT;
-                                        }
-                                        for (int i = 0; i < 10; ++i) {
-                                            parts.push_back(Part());
-                                            parts.back().dstR.w = 32;
-                                            parts.back().dstR.h = 32;
-                                            parts.back().dstR.x = random(0, windowWidth - parts.back().dstR.w);
-                                            parts.back().dstR.y = -parts.back().dstR.h;
+                    if (event.key.keysym.scancode == SDL_SCANCODE_ESCAPE) {
+                        if (!pauseKeyPressed) {
+                            pausedState = state;
+                            pauseKeyPressed = true;
+                            state = State::Paused;
+                        }
+                    }
+                    else {
+                        keys[event.key.keysym.scancode] = true;
+                        if (event.key.keysym.scancode == SDL_SCANCODE_SPACE) {
+                            if (hour >= 7 && hour <= 17) {
+                                canCollect = true;
+                                if (foods[0] == Food::Empty || foods[1] == Food::Empty) {
+                                    int index = foods[0] == Food::Empty ? 0 : 1;
+                                    for (auto& plot : plots) {
+                                        if (plot.isIntersecting(player.r)) {
+                                            state = State::Minigame;
+                                            if (plot.food == Food::Apple) {
+                                                currentPartT = appleT;
+                                            }
+                                            else if (plot.food == Food::Banana) {
+                                                currentPartT = bananaT;
+                                            }
+                                            else if (plot.food == Food::Carrot) {
+                                                currentPartT = carrotT;
+                                            }
+                                            else if (plot.food == Food::Grape) {
+                                                currentPartT = grapeT;
+                                            }
+                                            else if (plot.food == Food::Potato) {
+                                                currentPartT = potatoT;
+                                            }
+                                            else if (plot.food == Food::Pumpkin) {
+                                                currentPartT = pumpkinT;
+                                            }
+                                            for (int i = 0; i < 10; ++i) {
+                                                parts.push_back(Part());
+                                                parts.back().dstR.w = 32;
+                                                parts.back().dstR.h = 32;
+                                                parts.back().dstR.x = random(0, windowWidth - parts.back().dstR.w);
+                                                parts.back().dstR.y = -parts.back().dstR.h;
+                                            }
                                         }
                                     }
                                 }
                             }
-                        }
-                        else {
-                            canCollect = false;
+                            else {
+                                canCollect = false;
+                            }
                         }
                     }
                 }
                 if (event.type == SDL_KEYUP) {
-                    keys[event.key.keysym.scancode] = false;
+                    if (event.key.keysym.scancode == SDL_SCANCODE_ESCAPE) {
+                        if (pauseKeyPressed) {
+                            pauseKeyPressed = false;
+                        }
+                    }
+                    else {
+                        keys[event.key.keysym.scancode] = false;
+                    }
                 }
                 if (event.type == SDL_MOUSEBUTTONDOWN) {
                     buttons[event.button.button] = true;
@@ -2154,7 +2318,7 @@ gameBegin:
         else if (state == State::Shop) {
             SDL_Event event;
             while (SDL_PollEvent(&event)) {
-                if (event.type == SDL_QUIT || event.type == SDL_KEYDOWN && event.key.keysym.scancode == SDL_SCANCODE_ESCAPE) {
+                if (event.type == SDL_QUIT) {
                     running = false;
                     // TODO: On mobile remember to use eventWatch function (it doesn't reach this code when terminating)
                 }
@@ -2162,10 +2326,26 @@ gameBegin:
                     SDL_RenderSetScale(renderer, event.window.data1 / (float)windowWidth, event.window.data2 / (float)windowHeight);
                 }
                 if (event.type == SDL_KEYDOWN) {
-                    keys[event.key.keysym.scancode] = true;
+                    if (event.key.keysym.scancode == SDL_SCANCODE_ESCAPE) {
+                        if (!pauseKeyPressed) {
+                            pausedState = state;
+                            pauseKeyPressed = true;
+                            state = State::Paused;
+                        }
+                    }
+                    else {
+                        keys[event.key.keysym.scancode] = true;
+                    }
                 }
                 if (event.type == SDL_KEYUP) {
-                    keys[event.key.keysym.scancode] = false;
+                    if (event.key.keysym.scancode == SDL_SCANCODE_ESCAPE) {
+                        if (pauseKeyPressed) {
+                            pauseKeyPressed = false;
+                        }
+                    }
+                    else {
+                        keys[event.key.keysym.scancode] = false;
+                    }
                 }
                 if (event.type == SDL_MOUSEBUTTONDOWN) {
                     buttons[event.button.button] = true;
@@ -2215,7 +2395,7 @@ gameBegin:
         else if (state == State::Home) {
             SDL_Event event;
             while (SDL_PollEvent(&event)) {
-                if (event.type == SDL_QUIT || event.type == SDL_KEYDOWN && event.key.keysym.scancode == SDL_SCANCODE_ESCAPE) {
+                if (event.type == SDL_QUIT) {
                     running = false;
                     // TODO: On mobile remember to use eventWatch function (it doesn't reach this code when terminating)
                 }
@@ -2223,70 +2403,86 @@ gameBegin:
                     SDL_RenderSetScale(renderer, event.window.data1 / (float)windowWidth, event.window.data2 / (float)windowHeight);
                 }
                 if (event.type == SDL_KEYDOWN) {
-                    keys[event.key.keysym.scancode] = true;
-                    shouldShowWhenCanSleepAndGoShop = false;
-                    shouldShowInfoTextAboutNotEnoughEnergy = false;
-                    if (event.key.keysym.scancode == SDL_SCANCODE_SPACE) {
-                        if (SDL_HasIntersectionF(&player.r, &shopI.dstR)) {
-                            if (hour >= 0 && hour < 7 || hour > 17) {
-                                state = State::Shop;
-                                shouldShowWhenCanSleepAndGoShop = false;
-                                Mix_PlayChannel(-1, doorS, 0);
-                            }
-                            else {
-                                shouldShowWhenCanSleepAndGoShop = true;
-                            }
+                    if (event.key.keysym.scancode == SDL_SCANCODE_ESCAPE) {
+                        if (!pauseKeyPressed) {
+                            pausedState = state;
+                            pauseKeyPressed = true;
+                            state = State::Paused;
                         }
-                        else if (SDL_HasIntersectionF(&player.r, &doorI.dstR)) {
-                            if (!shouldGoHome) {
-                                state = State::Outside;
-                                player.r.x = houseR.x + houseR.w + 5;
-                                player.r.y = houseR.y + houseR.h / 2 - player.r.h / 2;
-                                canCollect = true;
-                                shouldShowWhenCanSleepAndGoShop = false;
-                                Mix_PlayChannel(-1, doorS, 0);
-                            }
-                            else {
-                                shouldShowInfoTextAboutNotEnoughEnergy = true;
-                            }
-                        }
-                        else if (SDL_HasIntersectionF(&player.r, &bedI.dstR)) {
-                            if (hour >= 0 && hour < 7 || hour > 17) {
-                                shouldShowWhenCanSleepAndGoShop = false;
-                                hour = 7;
-                                hourText.setText(renderer, robotoF, std::to_string(hour) + "am");
-                                energyText.setText(renderer, robotoF, maxEnergy > std::stoi(energyText.text) ? maxEnergy : std::stoi(energyText.text));
-                                shouldGoHome = false;
-                                shouldShowInfoTextAboutNotEnoughEnergy = false;
-                                Mix_PlayChannel(-1, sleepS, 0);
-                            }
-                            else {
-                                shouldShowWhenCanSleepAndGoShop = true;
-                            }
-                        }
-                        else if (SDL_HasIntersectionF(&player.r, &chestI.dstR)) {
-                            state = State::Storage;
-                        }
-                    }
-
-                    if (SDL_HasIntersectionF(&player.r, &shopI.dstR)) {
-                        currentAction.setActionText(shopI.actionText);
-                    }
-                    else if (SDL_HasIntersectionF(&player.r, &doorI.dstR)) {
-                        currentAction.setActionText(doorI.actionText);
-                    }
-                    else if (SDL_HasIntersectionF(&player.r, &bedI.dstR)) {
-                        currentAction.setActionText(bedI.actionText);
-                    }
-                    else if (SDL_HasIntersectionF(&player.r, &chestI.dstR)) {
-                        currentAction.setActionText(chestI.actionText);
                     }
                     else {
-                        currentAction.setActionText("");
+                        keys[event.key.keysym.scancode] = true;
+                        shouldShowWhenCanSleepAndGoShop = false;
+                        shouldShowInfoTextAboutNotEnoughEnergy = false;
+                        if (event.key.keysym.scancode == SDL_SCANCODE_SPACE) {
+                            if (SDL_HasIntersectionF(&player.r, &shopI.dstR)) {
+                                if (hour >= 0 && hour < 7 || hour > 17) {
+                                    state = State::Shop;
+                                    shouldShowWhenCanSleepAndGoShop = false;
+                                    Mix_PlayChannel(-1, doorS, 0);
+                                }
+                                else {
+                                    shouldShowWhenCanSleepAndGoShop = true;
+                                }
+                            }
+                            else if (SDL_HasIntersectionF(&player.r, &doorI.dstR)) {
+                                if (!shouldGoHome) {
+                                    state = State::Outside;
+                                    player.r.x = houseR.x + houseR.w + 5;
+                                    player.r.y = houseR.y + houseR.h / 2 - player.r.h / 2;
+                                    canCollect = true;
+                                    shouldShowWhenCanSleepAndGoShop = false;
+                                    Mix_PlayChannel(-1, doorS, 0);
+                                }
+                                else {
+                                    shouldShowInfoTextAboutNotEnoughEnergy = true;
+                                }
+                            }
+                            else if (SDL_HasIntersectionF(&player.r, &bedI.dstR)) {
+                                if (hour >= 0 && hour < 7 || hour > 17) {
+                                    shouldShowWhenCanSleepAndGoShop = false;
+                                    hour = 7;
+                                    hourText.setText(renderer, robotoF, std::to_string(hour) + "am");
+                                    energyText.setText(renderer, robotoF, maxEnergy > std::stoi(energyText.text) ? maxEnergy : std::stoi(energyText.text));
+                                    shouldGoHome = false;
+                                    shouldShowInfoTextAboutNotEnoughEnergy = false;
+                                    Mix_PlayChannel(-1, sleepS, 0);
+                                }
+                                else {
+                                    shouldShowWhenCanSleepAndGoShop = true;
+                                }
+                            }
+                            else if (SDL_HasIntersectionF(&player.r, &chestI.dstR)) {
+                                state = State::Storage;
+                            }
+                        }
+
+                        if (SDL_HasIntersectionF(&player.r, &shopI.dstR)) {
+                            currentAction.setActionText(shopI.actionText);
+                        }
+                        else if (SDL_HasIntersectionF(&player.r, &doorI.dstR)) {
+                            currentAction.setActionText(doorI.actionText);
+                        }
+                        else if (SDL_HasIntersectionF(&player.r, &bedI.dstR)) {
+                            currentAction.setActionText(bedI.actionText);
+                        }
+                        else if (SDL_HasIntersectionF(&player.r, &chestI.dstR)) {
+                            currentAction.setActionText(chestI.actionText);
+                        }
+                        else {
+                            currentAction.setActionText("");
+                        }
                     }
                 }
                 if (event.type == SDL_KEYUP) {
-                    keys[event.key.keysym.scancode] = false;
+                    if (event.key.keysym.scancode == SDL_SCANCODE_ESCAPE) {
+                        if (pauseKeyPressed) {
+                            pauseKeyPressed = false;
+                        }
+                    }
+                    else {
+                        keys[event.key.keysym.scancode] = false;
+                    }
                 }
                 if (event.type == SDL_MOUSEBUTTONDOWN) {
                     buttons[event.button.button] = true;
@@ -2398,7 +2594,7 @@ gameBegin:
         else if (state == State::Minigame) {
             SDL_Event event;
             while (SDL_PollEvent(&event)) {
-                if (event.type == SDL_QUIT || event.type == SDL_KEYDOWN && event.key.keysym.scancode == SDL_SCANCODE_ESCAPE) {
+                if (event.type == SDL_QUIT) {
                     running = false;
                     // TODO: On mobile remember to use eventWatch function (it doesn't reach this code when terminating)
                 }
@@ -2406,10 +2602,26 @@ gameBegin:
                     SDL_RenderSetScale(renderer, event.window.data1 / (float)windowWidth, event.window.data2 / (float)windowHeight);
                 }
                 if (event.type == SDL_KEYDOWN) {
-                    keys[event.key.keysym.scancode] = true;
+                    if (event.key.keysym.scancode == SDL_SCANCODE_ESCAPE) {
+                        if (!pauseKeyPressed) {
+                            pausedState = state;
+                            pauseKeyPressed = true;
+                            state = State::Paused;
+                        }
+                    }
+                    else {
+                        keys[event.key.keysym.scancode] = true;
+                    }
                 }
                 if (event.type == SDL_KEYUP) {
-                    keys[event.key.keysym.scancode] = false;
+                    if (event.key.keysym.scancode == SDL_SCANCODE_ESCAPE) {
+                        if (pauseKeyPressed) {
+                            pauseKeyPressed = false;
+                        }
+                    }
+                    else {
+                        keys[event.key.keysym.scancode] = false;
+                    }
                 }
                 if (event.type == SDL_MOUSEBUTTONDOWN) {
                     buttons[event.button.button] = true;
@@ -2472,7 +2684,7 @@ gameBegin:
         else if (state == State::Gameover) {
             SDL_Event event;
             while (SDL_PollEvent(&event)) {
-                if (event.type == SDL_QUIT || event.type == SDL_KEYDOWN && event.key.keysym.scancode == SDL_SCANCODE_ESCAPE) {
+                if (event.type == SDL_QUIT) {
                     running = false;
                     // TODO: On mobile remember to use eventWatch function (it doesn't reach this code when terminating)
                 }
@@ -2518,7 +2730,7 @@ gameBegin:
         else if (state == State::Storage) {
             SDL_Event event;
             while (SDL_PollEvent(&event)) {
-                if (event.type == SDL_QUIT || event.type == SDL_KEYDOWN && event.key.keysym.scancode == SDL_SCANCODE_ESCAPE) {
+                if (event.type == SDL_QUIT) {
                     running = false;
                     // TODO: On mobile remember to use eventWatch function (it doesn't reach this code when terminating)
                 }
@@ -2526,10 +2738,26 @@ gameBegin:
                     SDL_RenderSetScale(renderer, event.window.data1 / (float)windowWidth, event.window.data2 / (float)windowHeight);
                 }
                 if (event.type == SDL_KEYDOWN) {
-                    keys[event.key.keysym.scancode] = true;
+                    if (event.key.keysym.scancode == SDL_SCANCODE_ESCAPE) {
+                        if (!pauseKeyPressed) {
+                            pausedState = state;
+                            pauseKeyPressed = true;
+                            state = State::Paused;
+                        }
+                    }
+                    else {
+                        keys[event.key.keysym.scancode] = true;
+                    }
                 }
                 if (event.type == SDL_KEYUP) {
-                    keys[event.key.keysym.scancode] = false;
+                    if (event.key.keysym.scancode == SDL_SCANCODE_ESCAPE) {
+                        if (pauseKeyPressed) {
+                            pauseKeyPressed = false;
+                        }
+                    }
+                    else {
+                        keys[event.key.keysym.scancode] = false;
+                    }
                 }
                 if (event.type == SDL_MOUSEBUTTONDOWN) {
                     buttons[event.button.button] = true;
@@ -2582,6 +2810,61 @@ gameBegin:
             RenderStorage(storageContainer, storageHoverText, storageTitleText, storage, storageInvenPlaceholder, foods);
             SDL_RenderCopyF(renderer, xT, 0, &xBtnR);
             SDL_RenderPresent(renderer);
+        }
+        else if (state == State::Paused) {
+        SDL_Event event;
+        while (SDL_PollEvent(&event)) {
+            if (event.type == SDL_QUIT) {
+                running = false;
+                // TODO: On mobile remember to use eventWatch function (it doesn't reach this code when terminating)
+            }
+            if (event.type == SDL_WINDOWEVENT && event.window.event == SDL_WINDOWEVENT_RESIZED) {
+                SDL_RenderSetScale(renderer, event.window.data1 / (float)windowWidth, event.window.data2 / (float)windowHeight);
+            }
+            if (event.type == SDL_KEYDOWN && event.key.keysym.scancode == SDL_SCANCODE_ESCAPE) {
+                if (!pauseKeyPressed) {
+                    pauseKeyPressed = true;
+                    state = pausedState;
+                }
+            }
+            if (event.type == SDL_KEYUP && event.key.keysym.scancode == SDL_SCANCODE_ESCAPE) {
+                if (pauseKeyPressed) {
+                    pauseKeyPressed = false;
+                }
+            }
+            if (event.type == SDL_MOUSEBUTTONDOWN) {
+                buttons[event.button.button] = true;
+                for (int i = 0; i < PAUSE_NUM_OPTIONS; ++i) {
+                    if (SDL_PointInFRect(&mousePos, &pauseOptions[i].buttonText.dstR)) {
+                        HandleMenuOption(pauseOptions[i].menuType, state, pausedState, running);
+                    }
+                }
+            }
+            if (event.type == SDL_MOUSEBUTTONUP) {
+                buttons[event.button.button] = false;
+            }
+            if (event.type == SDL_MOUSEMOTION) {
+                float scaleX, scaleY;
+                SDL_RenderGetScale(renderer, &scaleX, &scaleY);
+                mousePos.x = event.motion.x / scaleX;
+                mousePos.y = event.motion.y / scaleY;
+                realMousePos.x = event.motion.x;
+                realMousePos.y = event.motion.y;
+
+                for (int i = 0; i < PAUSE_NUM_OPTIONS; ++i) {
+                    if (SDL_PointInFRect(&mousePos, &pauseOptions[i].buttonText.dstR)) {
+                        pauseOptions[i].selected = true;
+                    }
+                    else {
+                        pauseOptions[i].selected = false;
+                    }
+                }
+            }
+        }
+        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
+        SDL_RenderClear(renderer);
+        RenderPauseMenu(pauseContainer, pauseTitleText, pauseOptions);
+        SDL_RenderPresent(renderer);
         }
 
         saveData(scoreText, rotDelayInMs, isMuted, maxEnergy);

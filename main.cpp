@@ -622,12 +622,10 @@ struct Plot {
     {
         r.w = 200;
         r.h = 130;
-        for (int i = 0; i < MAX_TREES; ++i) {
-            SDL_FRect a{};
-            a.w = 64;
-            a.h = 64;
-            producesR.push_back(a);
-        }
+        SDL_FRect a{};
+        a.w = 64;
+        a.h = 64;
+        producesR.push_back(a);
     }
 
     void setFood(Food type)

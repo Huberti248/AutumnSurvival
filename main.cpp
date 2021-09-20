@@ -89,6 +89,8 @@ using namespace std::chrono_literals;
 #define LETTER_WIDTH 25
 #define PAUSE_NUM_OPTIONS 3
 #define PAUSE_MENU_BUTTON_PADDING 15
+#define MAINMENU_NUM_OPTIONS 4
+#define MAINMENU_BUTTON_PADDING 15
 
 int windowWidth = 800;
 int windowHeight = 600;
@@ -693,6 +695,7 @@ struct Interactable {
 };
 
 enum class State {
+    Main,
     Outside,
     Shop,
     Intro,
@@ -700,7 +703,8 @@ enum class State {
     Minigame,
     Gameover,
     Storage,
-    Paused
+    Paused,
+    Credits
 };
 
 struct Shop {
@@ -847,12 +851,15 @@ struct MenuButton {
     }
 };
 
-void HandleMenuOption(MenuOption option, State& gameState, State& pausedState, bool& gameRunning)
+void HandleMenuOption(MenuOption option, State& gameState, State& pausedState, Intro& intro, bool& gameRunning)
 {
     switch (option) {
     case MenuOption::Play:
+        intro.introClock.restart();
+        gameState = State::Intro;
         break;
     case MenuOption::Credits:
+        gameState = State::Credits;
         break;
     case MenuOption::Resume:
         gameState = pausedState;
@@ -860,6 +867,7 @@ void HandleMenuOption(MenuOption option, State& gameState, State& pausedState, b
     case MenuOption::Controls:
         break;
     case MenuOption::Main:
+        gameState = State::Main;
         break;
     case MenuOption::Quit:
         gameRunning = false;
@@ -1316,9 +1324,12 @@ void RenderStorage(SDL_FRect& container,
     }
 }
 
-void PauseInit(SDL_FRect& container,
+void MenuInit(SDL_FRect& container,
     Text& titleText,
+    std::string titleString,
     MenuButton options[],
+    const int numOptions,
+    const int buttonPadding,
     const std::string labels[],
     const MenuOption menuTypes[])
 {
@@ -1332,30 +1343,31 @@ void PauseInit(SDL_FRect& container,
     titleText.dstR.h = 100;
     titleText.dstR.x = windowWidth / 2.0f - titleText.dstR.w / 2.0f;
     titleText.dstR.y = SCREEN_PADDING;
-    titleText.setText(renderer, robotoF, "Paused", { 255, 0, 0 });
+    titleText.setText(renderer, robotoF, titleString, { 255, 0, 0 });
 
     // Setup buttons
-    for (int i = 0; i < PAUSE_NUM_OPTIONS; ++i) {
+    for (int i = 0; i < numOptions; ++i) {
         options[i].label = labels[i];
         options[i].menuType = menuTypes[i];
         options[i].selected = false;
         options[i].buttonText.dstR.w = strlen(options[i].label.c_str()) * LETTER_WIDTH;
         options[i].buttonText.dstR.h = 50;
-        options[i].calculateButtonPosition(i, PAUSE_NUM_OPTIONS, windowWidth, windowHeight, PAUSE_MENU_BUTTON_PADDING);
+        options[i].calculateButtonPosition(i, numOptions, windowWidth, windowHeight, buttonPadding);
         options[i].buttonText.dstR.y += titleText.dstR.h;
         options[i].buttonText.setText(renderer, robotoF, options[i].label, BUTTON_UNSELECTED);
     }
 }
 
-void RenderPauseMenu(SDL_FRect& container,
+void RenderMenu(SDL_FRect& container,
     Text& titleText,
-    MenuButton options[]) 
+    MenuButton options[],
+    const int numOptions) 
 {
     SDL_SetRenderDrawColor(renderer, 20, 20, 30, 200);
     SDL_RenderFillRectF(renderer, &container);
     titleText.draw(renderer);
 
-    for (int i = 0; i < PAUSE_NUM_OPTIONS; ++i) {
+    for (int i = 0; i < numOptions; ++i) {
         if (options[i].selected) {
             options[i].buttonText.setText(renderer, robotoF, options[i].label, BUTTON_SELECTED);
         }
@@ -1649,7 +1661,7 @@ gameBegin:
     Clock tradeClock;
     Text scoreText;
     Shop shop;
-    State state = State::Intro;
+    State state = State::Main;
     State pausedState = state;
     Clock rotClock;
     int rotDelayInMs = ROT_INIT_DELAY_IN_MS;
@@ -1737,15 +1749,17 @@ gameBegin:
     };
     Text pauseTitleText;
     SDL_FRect pauseContainer;
-    MenuButton mainOptions[PAUSE_NUM_OPTIONS];
-    const std::string mainLabels[PAUSE_NUM_OPTIONS] = {
-        "Resume",
-        "Return to Main Menu",
-        "Quit to Desktop"
+    MenuButton mainOptions[MAINMENU_NUM_OPTIONS];
+    const std::string mainLabels[MAINMENU_NUM_OPTIONS] = {
+        "Play",
+        "Controls",
+        "Credits",
+        "Exit"
     };
-    const MenuOption mainMenuTypes[PAUSE_NUM_OPTIONS] = {
-        MenuOption::Resume,
-        MenuOption::Main,
+    const MenuOption mainMenuTypes[MAINMENU_NUM_OPTIONS] = {
+        MenuOption::Play,
+        MenuOption::Controls,
+        MenuOption::Credits,
         MenuOption::Quit
     };
     Text mainTitleText;
@@ -1905,7 +1919,8 @@ gameBegin:
     loadMap("res/map.tmx", mapWidth, mapHeight, tiles, plots, houseR);
     HomeInit(tile, homeGround, homeWall, homeSeparator, windowR, doorI, shopI, player, bedI, chestI, actionText);
     StorageInit(storageContainer, storageHoverText, storageTitleText, storage, storageInvenPlaceholder);
-    PauseInit(pauseContainer, pauseTitleText, pauseOptions, pauseLabels, pauseMenuTypes);
+    MenuInit(pauseContainer, pauseTitleText, "Paused", pauseOptions, PAUSE_NUM_OPTIONS, PAUSE_MENU_BUTTON_PADDING, pauseLabels, pauseMenuTypes);
+    MenuInit(mainContainer, mainTitleText, "Autumn Survival", mainOptions, MAINMENU_NUM_OPTIONS, MAINMENU_BUTTON_PADDING, mainLabels, mainMenuTypes);
     for (auto& food : foods) {
         food = Food::Empty;
     }
@@ -1940,7 +1955,51 @@ gameBegin:
                 Mix_PlayMusic(josephKosmaM, 1);
             }
         }
-        if (state == State::Intro) {
+        if (state == State::Main) {
+            SDL_Event event;
+            while (SDL_PollEvent(&event)) {
+                if (event.type == SDL_QUIT) {
+                    running = false;
+                    // TODO: On mobile remember to use eventWatch function (it doesn't reach this code when terminating)
+                }
+                if (event.type == SDL_WINDOWEVENT && event.window.event == SDL_WINDOWEVENT_RESIZED) {
+                    SDL_RenderSetScale(renderer, event.window.data1 / (float)windowWidth, event.window.data2 / (float)windowHeight);
+                }
+                if (event.type == SDL_MOUSEBUTTONDOWN) {
+                    buttons[event.button.button] = true;
+                    for (int i = 0; i < MAINMENU_NUM_OPTIONS; ++i) {
+                        if (SDL_PointInFRect(&mousePos, &mainOptions[i].buttonText.dstR)) {
+                            HandleMenuOption(mainOptions[i].menuType, state, pausedState, intro, running);
+                        }
+                    }
+                }
+                if (event.type == SDL_MOUSEBUTTONUP) {
+                    buttons[event.button.button] = false;
+                }
+                if (event.type == SDL_MOUSEMOTION) {
+                    float scaleX, scaleY;
+                    SDL_RenderGetScale(renderer, &scaleX, &scaleY);
+                    mousePos.x = event.motion.x / scaleX;
+                    mousePos.y = event.motion.y / scaleY;
+                    realMousePos.x = event.motion.x;
+                    realMousePos.y = event.motion.y;
+
+                    for (int i = 0; i < MAINMENU_NUM_OPTIONS; ++i) {
+                        if (SDL_PointInFRect(&mousePos, &mainOptions[i].buttonText.dstR)) {
+                            mainOptions[i].selected = true;
+                        }
+                        else {
+                            mainOptions[i].selected = false;
+                        }
+                    }
+                }
+            }
+            SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
+            SDL_RenderClear(renderer);
+            RenderMenu(mainContainer, mainTitleText, mainOptions, MAINMENU_NUM_OPTIONS);
+            SDL_RenderPresent(renderer);
+        }
+        else if (state == State::Intro) {
             SDL_Event event;
             while (SDL_PollEvent(&event)) {
                 if (event.type == SDL_QUIT) {
@@ -2836,7 +2895,7 @@ gameBegin:
                 buttons[event.button.button] = true;
                 for (int i = 0; i < PAUSE_NUM_OPTIONS; ++i) {
                     if (SDL_PointInFRect(&mousePos, &pauseOptions[i].buttonText.dstR)) {
-                        HandleMenuOption(pauseOptions[i].menuType, state, pausedState, running);
+                        HandleMenuOption(pauseOptions[i].menuType, state, pausedState, intro, running);
                     }
                 }
             }
@@ -2863,7 +2922,7 @@ gameBegin:
         }
         SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
         SDL_RenderClear(renderer);
-        RenderPauseMenu(pauseContainer, pauseTitleText, pauseOptions);
+        RenderMenu(pauseContainer, pauseTitleText, pauseOptions, PAUSE_NUM_OPTIONS);
         SDL_RenderPresent(renderer);
         }
 

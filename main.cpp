@@ -1437,6 +1437,24 @@ void addBonusForFood(std::array<Food, 2>& foods, Text& energyText, float& player
     }
 }
 
+void eat(SDL_FRect& inventorySlotR, SDL_FRect& inventorySlot2R, Text& energyText, float& playerSpeed, Clock& increasedPlayerSpeedClock, std::array<Food, 2>& foods, Text& hungerText)
+{
+    if (SDL_PointInFRect(&mousePos, &inventorySlotR)) {
+        if (foods[0] != Food::Empty) {
+            addBonusForFood(foods, energyText, playerSpeed, increasedPlayerSpeedClock);
+            foods[0] = Food::Empty;
+            hungerText.setText(renderer, robotoF, std::stoi(hungerText.text) + 50 > 100 ? 100 : std::stoi(hungerText.text) + 50);
+        }
+    }
+    if (SDL_PointInFRect(&mousePos, &inventorySlot2R)) {
+        if (foods[1] != Food::Empty) {
+            addBonusForFood(foods, energyText, playerSpeed, increasedPlayerSpeedClock);
+            foods[1] = Food::Empty;
+            hungerText.setText(renderer, robotoF, std::stoi(hungerText.text) + 50 > 100 ? 100 : std::stoi(hungerText.text) + 50);
+        }
+    }
+}
+
 int main(int argc, char* argv[])
 {
     std::srand(std::time(0));
@@ -1917,20 +1935,7 @@ gameBegin:
                         foods[1] = Food::Empty;
                     }
                     if (event.button.button == SDL_BUTTON_RIGHT) {
-                        if (SDL_PointInFRect(&mousePos, &inventorySlotR)) {
-                            if (foods[0] != Food::Empty) {
-                                addBonusForFood(foods, energyText, playerSpeed, increasedPlayerSpeedClock);
-                                foods[0] = Food::Empty;
-                                hungerText.setText(renderer, robotoF, std::stoi(hungerText.text) + 50 > 100 ? 100 : std::stoi(hungerText.text) + 50);
-                            }
-                        }
-                        if (SDL_PointInFRect(&mousePos, &inventorySlot2R)) {
-                            if (foods[1] != Food::Empty) {
-                                addBonusForFood(foods, energyText, playerSpeed, increasedPlayerSpeedClock);
-                                foods[1] = Food::Empty;
-                                hungerText.setText(renderer, robotoF, std::stoi(hungerText.text) + 50 > 100 ? 100 : std::stoi(hungerText.text) + 50);
-                            }
-                        }
+                        eat(inventorySlotR, inventorySlot2R, energyText, playerSpeed, increasedPlayerSpeedClock, foods, hungerText);
                     }
                 }
                 if (event.type == SDL_MOUSEBUTTONUP) {
@@ -2294,6 +2299,9 @@ gameBegin:
                         else {
                             unmuteMusicAndSounds();
                         }
+                    }
+                    if (event.button.button == SDL_BUTTON_RIGHT) {
+                        eat(inventorySlotR, inventorySlot2R, energyText, playerSpeed, increasedPlayerSpeedClock, foods, hungerText);
                     }
                 }
                 if (event.type == SDL_MOUSEBUTTONUP) {

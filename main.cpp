@@ -30,7 +30,7 @@
 #include <array>
 #ifdef __ANDROID__
 #include "vendor/PUGIXML/src/pugixml.hpp"
-#include <android/log.h> //__android_log_print(ANDROID_LOG_VERBOSE, "AutumnLeafCollector", "Example number log: %d", number);
+#include <android/log.h> //__android_log_print(ANDROID_LOG_VERBOSE, "AutumnSurvival", "Example number log: %d", number);
 #include <jni.h>
 #else
 #include <filesystem>
@@ -78,13 +78,13 @@ using namespace std::chrono_literals;
 #define PART_SPEED 0.1
 #define HUNGER_DECREASE_DELAY_IN_MS 1000
 
-#define BUTTON_SELECTED \
-    {                        \
-        242, 182, 61, 255    \
+#define BUTTON_SELECTED   \
+    {                     \
+        242, 182, 61, 255 \
     }
-#define BUTTON_UNSELECTED \
-    {                          \
-        209, 180, 140, 255     \
+#define BUTTON_UNSELECTED  \
+    {                      \
+        209, 180, 140, 255 \
     }
 #define LETTER_WIDTH 25
 #define PAUSE_NUM_OPTIONS 3
@@ -112,7 +112,7 @@ SDL_Texture* tree3T;
 SDL_Texture* shopT;
 SDL_Texture* backArrowT;
 SDL_Texture* buyT;
-SDL_Texture* leafWithSprayerT;
+SDL_Texture* appleWithSprayerT;
 SDL_Texture* vineT;
 SDL_Texture* grapeT;
 SDL_Texture* appleT;
@@ -153,6 +153,7 @@ SDL_Texture* windowT;
 SDL_Texture* hungerT;
 SDL_Texture* carrotSoilT;
 SDL_Texture* potatoSoilT;
+SDL_Texture* sellT;
 Mix_Music* josephKosmaM;
 Mix_Music* antonioVivaldiM;
 Mix_Chunk* doorS;
@@ -708,6 +709,14 @@ enum class State {
     Controls
 };
 
+struct SellItem {
+    SDL_FRect imageR{};
+    Text countText;
+    SDL_FRect sellR{};
+    Text gainText;
+    SDL_Texture* foodT = 0;
+};
+
 struct Shop {
     SDL_FRect lessRotR{};
     Text lessRotText;
@@ -720,6 +729,8 @@ struct Shop {
     SDL_FRect moreEnergyBuyR{};
 
     SDL_FRect backArrowR{};
+
+    std::vector<SellItem> sellItems;
 };
 
 enum class Music {
@@ -845,7 +856,8 @@ struct MenuButton {
         const int numButtons,
         const float width,
         const float height,
-        float paddingVertical) {
+        float paddingVertical)
+    {
 
         buttonText.dstR.x = width / 2.0f - buttonText.dstR.w / 2.0f;
         buttonText.dstR.y = height / 2.0f - numButtons * (buttonText.dstR.h / 2.0f + paddingVertical) + (index + 0.5f) * (buttonText.dstR.h + paddingVertical);
@@ -856,8 +868,7 @@ void HandleMenuOption(MenuOption option, State& gameState, State& pausedState, I
 {
     switch (option) {
     case MenuOption::Play:
-        intro.introClock.restart();
-        gameState = State::Intro;
+        gameState = State::Outside;
         break;
     case MenuOption::Credits:
         gameState = State::Credits;
@@ -1362,7 +1373,7 @@ void MenuInit(SDL_FRect& container,
 void RenderMenu(SDL_FRect& container,
     Text& titleText,
     MenuButton options[],
-    const int numOptions) 
+    const int numOptions)
 {
     SDL_SetRenderDrawColor(renderer, 20, 20, 30, 200);
     SDL_RenderFillRectF(renderer, &container);
@@ -1415,7 +1426,7 @@ void CreditsInit(Text& titleText,
     externalGraphicsText.dstR.h = 50;
     externalGraphicsText.dstR.x = windowWidth / 2 - externalGraphicsText.dstR.w / 2;
     externalGraphicsText.dstR.y = authors.back().dstR.y + authors.back().dstR.h + 50;
-    
+
     egAuthorsTexts.push_back(Text());
     egAuthorsTexts.back().setText(renderer, robotoF, "Becris");
     egAuthorsTexts.back().dstR.w = egAuthorsTexts.back().text.length() * (LETTER_WIDTH / 50.0f * 25);
@@ -1490,7 +1501,7 @@ void RenderCredits(Text& titleText,
     }
     SDL_SetRenderDrawColor(renderer, 44, 27, 46, SDL_ALPHA_OPAQUE);
     SDL_RenderFillRectF(renderer, &backRect);
-    
+
     if (backButton.selected) {
         backButton.buttonText.setText(renderer, robotoF, backButton.label, BUTTON_SELECTED);
     }
@@ -1701,7 +1712,7 @@ int main(int argc, char* argv[])
     TTF_Init();
     Mix_OpenAudio(44100, MIX_DEFAULT_FORMAT, 2, 2048);
     SDL_GetMouseState(&mousePos.x, &mousePos.y);
-    window = SDL_CreateWindow("AutumnLeafCollector", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, windowWidth, windowHeight, SDL_WINDOW_RESIZABLE);
+    window = SDL_CreateWindow("AutumnSurvival", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, windowWidth, windowHeight, SDL_WINDOW_RESIZABLE);
     renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
     robotoF = TTF_OpenFont("res/roboto.ttf", 72);
     int w, h;
@@ -1709,7 +1720,7 @@ int main(int argc, char* argv[])
     SDL_RenderSetScale(renderer, w / (float)windowWidth, h / (float)windowHeight);
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
     SDL_AddEventWatch(eventWatch, 0);
-    prefPath = SDL_GetPrefPath("NextCodeApps", "AutumnLeafCollector");
+    prefPath = SDL_GetPrefPath("NextCodeApps", "AutumnSurvival");
 gameBegin:
     leavesT = IMG_LoadTexture(renderer, "res/leaves.png");
     treeT = IMG_LoadTexture(renderer, "res/tree.png");
@@ -1719,7 +1730,7 @@ gameBegin:
     shopT = IMG_LoadTexture(renderer, "res/shop.png");
     backArrowT = IMG_LoadTexture(renderer, "res/backArrow.png");
     buyT = IMG_LoadTexture(renderer, "res/buy.png");
-    leafWithSprayerT = IMG_LoadTexture(renderer, "res/leafWithSprayer.png");
+    appleWithSprayerT = IMG_LoadTexture(renderer, "res/appleWithSprayer.png");
     vineT = IMG_LoadTexture(renderer, "res/vine.png");
     grapeT = IMG_LoadTexture(renderer, "res/grape.png");
     appleT = IMG_LoadTexture(renderer, "res/apple.png");
@@ -1755,6 +1766,7 @@ gameBegin:
     hungerT = IMG_LoadTexture(renderer, "res/hunger.png");
     carrotSoilT = IMG_LoadTexture(renderer, "res/carrotSoil.png");
     potatoSoilT = IMG_LoadTexture(renderer, "res/potatoSoil.png");
+    sellT = IMG_LoadTexture(renderer, "res/sell.png");
     josephKosmaM = Mix_LoadMUS("res/autumnLeavesJosephKosma.mp3");
     antonioVivaldiM = Mix_LoadMUS("res/jesienAntonioVivaldi.mp3");
     doorS = Mix_LoadWAV("res/door.wav");
@@ -1783,7 +1795,127 @@ gameBegin:
     Clock tradeClock;
     Text scoreText;
     Shop shop;
-    State state = State::Main;
+    shop.sellItems.push_back(SellItem());
+    shop.sellItems.back().imageR.w = 72;
+    shop.sellItems.back().imageR.h = 72;
+    shop.sellItems.back().imageR.x = 5;
+    shop.sellItems.back().imageR.y = windowHeight - shop.sellItems.back().imageR.h - 100;
+    shop.sellItems.back().countText.dstR.w = 50;
+    shop.sellItems.back().countText.dstR.h = 30;
+    shop.sellItems.back().countText.dstR.x = shop.sellItems.back().imageR.x + shop.sellItems.back().imageR.w + 5;
+    shop.sellItems.back().countText.dstR.y = shop.sellItems.back().imageR.y + shop.sellItems.back().imageR.h / 2;
+    shop.sellItems.back().countText.setText(renderer, robotoF, "x0");
+    shop.sellItems.back().sellR.w = shop.sellItems.back().imageR.w;
+    shop.sellItems.back().sellR.h = 40;
+    shop.sellItems.back().sellR.x = shop.sellItems.back().imageR.x;
+    shop.sellItems.back().sellR.y = shop.sellItems.back().imageR.y + shop.sellItems.back().imageR.h;
+    shop.sellItems.back().gainText.setText(renderer, robotoF, "5");
+    shop.sellItems.back().gainText.dstR.w = 50;
+    shop.sellItems.back().gainText.dstR.h = 40;
+    shop.sellItems.back().gainText.dstR.x = shop.sellItems.back().sellR.x + shop.sellItems.back().sellR.w / 2 - shop.sellItems.back().gainText.dstR.w / 2;
+    shop.sellItems.back().gainText.dstR.y = shop.sellItems.back().sellR.y + shop.sellItems.back().sellR.h;
+    shop.sellItems.back().foodT = bananaT;
+    shop.sellItems.push_back(SellItem());
+    shop.sellItems.back().imageR.w = 72;
+    shop.sellItems.back().imageR.h = 72;
+    shop.sellItems.back().imageR.x = shop.sellItems[shop.sellItems.size() - 2].countText.dstR.x + shop.sellItems[shop.sellItems.size() - 2].countText.dstR.w + 5;
+    shop.sellItems.back().imageR.y = windowHeight - shop.sellItems.back().imageR.h - 100;
+    shop.sellItems.back().countText.dstR.w = 50;
+    shop.sellItems.back().countText.dstR.h = 30;
+    shop.sellItems.back().countText.dstR.x = shop.sellItems.back().imageR.x + shop.sellItems.back().imageR.w + 5;
+    shop.sellItems.back().countText.dstR.y = shop.sellItems.back().imageR.y + shop.sellItems.back().imageR.h / 2;
+    shop.sellItems.back().countText.setText(renderer, robotoF, "x0");
+    shop.sellItems.back().sellR.w = shop.sellItems.back().imageR.w;
+    shop.sellItems.back().sellR.h = 40;
+    shop.sellItems.back().sellR.x = shop.sellItems.back().imageR.x;
+    shop.sellItems.back().sellR.y = shop.sellItems.back().imageR.y + shop.sellItems.back().imageR.h;
+    shop.sellItems.back().gainText.setText(renderer, robotoF, "3");
+    shop.sellItems.back().gainText.dstR.w = 50;
+    shop.sellItems.back().gainText.dstR.h = 40;
+    shop.sellItems.back().gainText.dstR.x = shop.sellItems.back().sellR.x + shop.sellItems.back().sellR.w / 2 - shop.sellItems.back().gainText.dstR.w / 2;
+    shop.sellItems.back().gainText.dstR.y = shop.sellItems.back().sellR.y + shop.sellItems.back().sellR.h;
+    shop.sellItems.back().foodT = appleT;
+    shop.sellItems.push_back(SellItem());
+    shop.sellItems.back().imageR.w = 72;
+    shop.sellItems.back().imageR.h = 72;
+    shop.sellItems.back().imageR.x = shop.sellItems[shop.sellItems.size() - 2].countText.dstR.x + shop.sellItems[shop.sellItems.size() - 2].countText.dstR.w + 5;
+    shop.sellItems.back().imageR.y = windowHeight - shop.sellItems.back().imageR.h - 100;
+    shop.sellItems.back().countText.dstR.w = 50;
+    shop.sellItems.back().countText.dstR.h = 30;
+    shop.sellItems.back().countText.dstR.x = shop.sellItems.back().imageR.x + shop.sellItems.back().imageR.w + 5;
+    shop.sellItems.back().countText.dstR.y = shop.sellItems.back().imageR.y + shop.sellItems.back().imageR.h / 2;
+    shop.sellItems.back().countText.setText(renderer, robotoF, "x0");
+    shop.sellItems.back().sellR.w = shop.sellItems.back().imageR.w;
+    shop.sellItems.back().sellR.h = 40;
+    shop.sellItems.back().sellR.x = shop.sellItems.back().imageR.x;
+    shop.sellItems.back().sellR.y = shop.sellItems.back().imageR.y + shop.sellItems.back().imageR.h;
+    shop.sellItems.back().gainText.setText(renderer, robotoF, "7");
+    shop.sellItems.back().gainText.dstR.w = 50;
+    shop.sellItems.back().gainText.dstR.h = 40;
+    shop.sellItems.back().gainText.dstR.x = shop.sellItems.back().sellR.x + shop.sellItems.back().sellR.w / 2 - shop.sellItems.back().gainText.dstR.w / 2;
+    shop.sellItems.back().gainText.dstR.y = shop.sellItems.back().sellR.y + shop.sellItems.back().sellR.h;
+    shop.sellItems.back().foodT = grapeT;
+    shop.sellItems.push_back(SellItem());
+    shop.sellItems.back().imageR.w = 72;
+    shop.sellItems.back().imageR.h = 72;
+    shop.sellItems.back().imageR.x = shop.sellItems[shop.sellItems.size() - 2].countText.dstR.x + shop.sellItems[shop.sellItems.size() - 2].countText.dstR.w + 5;
+    shop.sellItems.back().imageR.y = windowHeight - shop.sellItems.back().imageR.h - 100;
+    shop.sellItems.back().countText.dstR.w = 50;
+    shop.sellItems.back().countText.dstR.h = 30;
+    shop.sellItems.back().countText.dstR.x = shop.sellItems.back().imageR.x + shop.sellItems.back().imageR.w + 5;
+    shop.sellItems.back().countText.dstR.y = shop.sellItems.back().imageR.y + shop.sellItems.back().imageR.h / 2;
+    shop.sellItems.back().countText.setText(renderer, robotoF, "x0");
+    shop.sellItems.back().sellR.w = shop.sellItems.back().imageR.w;
+    shop.sellItems.back().sellR.h = 40;
+    shop.sellItems.back().sellR.x = shop.sellItems.back().imageR.x;
+    shop.sellItems.back().sellR.y = shop.sellItems.back().imageR.y + shop.sellItems.back().imageR.h;
+    shop.sellItems.back().gainText.setText(renderer, robotoF, "10");
+    shop.sellItems.back().gainText.dstR.w = 50;
+    shop.sellItems.back().gainText.dstR.h = 40;
+    shop.sellItems.back().gainText.dstR.x = shop.sellItems.back().sellR.x + shop.sellItems.back().sellR.w / 2 - shop.sellItems.back().gainText.dstR.w / 2;
+    shop.sellItems.back().gainText.dstR.y = shop.sellItems.back().sellR.y + shop.sellItems.back().sellR.h;
+    shop.sellItems.back().foodT = pumpkinT;
+    shop.sellItems.push_back(SellItem());
+    shop.sellItems.back().imageR.w = 72;
+    shop.sellItems.back().imageR.h = 72;
+    shop.sellItems.back().imageR.x = shop.sellItems[shop.sellItems.size() - 2].countText.dstR.x + shop.sellItems[shop.sellItems.size() - 2].countText.dstR.w + 5;
+    shop.sellItems.back().imageR.y = windowHeight - shop.sellItems.back().imageR.h - 100;
+    shop.sellItems.back().countText.dstR.w = 50;
+    shop.sellItems.back().countText.dstR.h = 30;
+    shop.sellItems.back().countText.dstR.x = shop.sellItems.back().imageR.x + shop.sellItems.back().imageR.w + 5;
+    shop.sellItems.back().countText.dstR.y = shop.sellItems.back().imageR.y + shop.sellItems.back().imageR.h / 2;
+    shop.sellItems.back().countText.setText(renderer, robotoF, "x0");
+    shop.sellItems.back().sellR.w = shop.sellItems.back().imageR.w;
+    shop.sellItems.back().sellR.h = 40;
+    shop.sellItems.back().sellR.x = shop.sellItems.back().imageR.x;
+    shop.sellItems.back().sellR.y = shop.sellItems.back().imageR.y + shop.sellItems.back().imageR.h;
+    shop.sellItems.back().gainText.setText(renderer, robotoF, "5");
+    shop.sellItems.back().gainText.dstR.w = 50;
+    shop.sellItems.back().gainText.dstR.h = 40;
+    shop.sellItems.back().gainText.dstR.x = shop.sellItems.back().sellR.x + shop.sellItems.back().sellR.w / 2 - shop.sellItems.back().gainText.dstR.w / 2;
+    shop.sellItems.back().gainText.dstR.y = shop.sellItems.back().sellR.y + shop.sellItems.back().sellR.h;
+    shop.sellItems.back().foodT = potatoT;
+    shop.sellItems.push_back(SellItem());
+    shop.sellItems.back().imageR.w = 72;
+    shop.sellItems.back().imageR.h = 72;
+    shop.sellItems.back().imageR.x = shop.sellItems[shop.sellItems.size() - 2].countText.dstR.x + shop.sellItems[shop.sellItems.size() - 2].countText.dstR.w + 5;
+    shop.sellItems.back().imageR.y = windowHeight - shop.sellItems.back().imageR.h - 100;
+    shop.sellItems.back().countText.dstR.w = 50;
+    shop.sellItems.back().countText.dstR.h = 30;
+    shop.sellItems.back().countText.dstR.x = shop.sellItems.back().imageR.x + shop.sellItems.back().imageR.w + 5;
+    shop.sellItems.back().countText.dstR.y = shop.sellItems.back().imageR.y + shop.sellItems.back().imageR.h / 2;
+    shop.sellItems.back().countText.setText(renderer, robotoF, "x0");
+    shop.sellItems.back().sellR.w = shop.sellItems.back().imageR.w;
+    shop.sellItems.back().sellR.h = 40;
+    shop.sellItems.back().sellR.x = shop.sellItems.back().imageR.x;
+    shop.sellItems.back().sellR.y = shop.sellItems.back().imageR.y + shop.sellItems.back().imageR.h;
+    shop.sellItems.back().gainText.setText(renderer, robotoF, "7");
+    shop.sellItems.back().gainText.dstR.w = 50;
+    shop.sellItems.back().gainText.dstR.h = 40;
+    shop.sellItems.back().gainText.dstR.x = shop.sellItems.back().sellR.x + shop.sellItems.back().sellR.w / 2 - shop.sellItems.back().gainText.dstR.w / 2;
+    shop.sellItems.back().gainText.dstR.y = shop.sellItems.back().sellR.y + shop.sellItems.back().sellR.h;
+    shop.sellItems.back().foodT = carrotT;
+    State state = State::Intro;
     State pausedState = state;
     Clock rotClock;
     int rotDelayInMs = ROT_INIT_DELAY_IN_MS;
@@ -1862,7 +1994,7 @@ gameBegin:
     const std::string pauseLabels[PAUSE_NUM_OPTIONS] = {
         "Resume",
         "Return to Main Menu",
-        "Quit to Desktop"
+        "Quit"
     };
     const MenuOption pauseMenuTypes[PAUSE_NUM_OPTIONS] = {
         MenuOption::Resume,
@@ -2177,7 +2309,7 @@ gameBegin:
                 }
             }
             if (intro.introClock.getElapsedTime() > 1000) {
-                state = State::Outside;
+                state = State::Main;
             }
             SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
             SDL_RenderClear(renderer);
@@ -2555,6 +2687,111 @@ gameBegin:
                             Mix_PlayChannel(-1, powerupS, 0);
                         }
                     }
+                    for (int i = 0; i < shop.sellItems.size(); ++i) {
+                        if (SDL_PointInFRect(&mousePos, &shop.sellItems[i].sellR)) {
+                            std::string count = shop.sellItems[i].countText.text;
+                            count.erase(0, 1);
+                            /*
+                                NOTE: Order in storage
+                                0 Apple,
+                                1 Carrot,
+                                2 Grape,
+                                3 Potato,
+                                4 Pumpkin,
+                                5 Banana,
+                                Order in shop
+                                0 banana
+                                1 apple
+                                2 grape
+                                3 pumpkin 
+                                4 potato
+                                5 carrot
+                            */
+                            if (std::stoi(count) > 0) {
+                                scoreText.setText(renderer, robotoF, std::stoi(scoreText.text) + std::stoi(shop.sellItems[i].gainText.text));
+                                count = std::to_string(std::stoi(count) - 1);
+                                shop.sellItems[i].countText.setText(renderer, robotoF, "x" + count);
+                                if (i == 0) {
+                                    if (storage[5].amount > 0) {
+                                        --storage[5].amount;
+                                    }
+                                    else {
+                                        if (foods[0] == Food::Banana) {
+                                            foods[0] = Food::Empty;
+                                        }
+                                        else {
+                                            foods[1] = Food::Empty;
+                                        }
+                                    }
+                                }
+                                else if (i == 1) {
+                                    if (storage[0].amount > 0) {
+                                        --storage[0].amount;
+                                    }
+                                    else {
+                                        if (foods[0] == Food::Apple) {
+                                            foods[0] = Food::Empty;
+                                        }
+                                        else {
+                                            foods[1] = Food::Empty;
+                                        }
+                                    }
+                                }
+                                else if (i == 2) {
+                                    if (storage[2].amount > 0) {
+                                        --storage[2].amount;
+                                    }
+                                    else {
+                                        if (foods[0] == Food::Grape) {
+                                            foods[0] = Food::Empty;
+                                        }
+                                        else {
+                                            foods[1] = Food::Empty;
+                                        }
+                                    }
+                                }
+                                else if (i == 3) {
+                                    if (storage[4].amount > 0) {
+                                        --storage[4].amount;
+                                    }
+                                    else {
+                                        if (foods[0] == Food::Pumpkin) {
+                                            foods[0] = Food::Empty;
+                                        }
+                                        else {
+                                            foods[1] = Food::Empty;
+                                        }
+                                    }
+                                }
+                                else if (i == 4) {
+                                    if (storage[3].amount > 0) {
+                                        --storage[3].amount;
+                                    }
+                                    else {
+                                        if (foods[0] == Food::Potato) {
+                                            foods[0] = Food::Empty;
+                                        }
+                                        else {
+                                            foods[1] = Food::Empty;
+                                        }
+                                    }
+                                }
+                                else if (i == 5) {
+                                    if (storage[1].amount > 0) {
+                                        --storage[1].amount;
+                                    }
+                                    else {
+                                        if (foods[0] == Food::Carrot) {
+                                            foods[0] = Food::Empty;
+                                        }
+                                        else {
+                                            foods[1] = Food::Empty;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
                 if (event.type == SDL_MOUSEBUTTONUP) {
                     buttons[event.button.button] = false;
@@ -2570,7 +2807,7 @@ gameBegin:
             }
             SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
             SDL_RenderClear(renderer);
-            SDL_RenderCopyF(renderer, leafWithSprayerT, 0, &shop.lessRotR);
+            SDL_RenderCopyF(renderer, appleWithSprayerT, 0, &shop.lessRotR);
             shop.lessRotText.draw(renderer);
             shop.lessRotPriceText.draw(renderer);
             SDL_RenderCopyF(renderer, buyT, 0, &shop.lessRotBuyR);
@@ -2579,6 +2816,12 @@ gameBegin:
             shop.moreEnergyPriceText.draw(renderer);
             SDL_RenderCopyF(renderer, buyT, 0, &shop.moreEnergyBuyR);
             SDL_RenderCopyF(renderer, backArrowT, 0, &shop.backArrowR);
+            for (int i = 0; i < shop.sellItems.size(); ++i) {
+                SDL_RenderCopyF(renderer, shop.sellItems[i].foodT, 0, &shop.sellItems[i].imageR);
+                shop.sellItems[i].countText.draw(renderer);
+                SDL_RenderCopyF(renderer, sellT, 0, &shop.sellItems[i].sellR);
+                shop.sellItems[i].gainText.draw(renderer);
+            }
             SDL_RenderPresent(renderer);
         }
         else if (state == State::Home) {
@@ -2609,6 +2852,96 @@ gameBegin:
                                     state = State::Shop;
                                     shouldShowWhenCanSleepAndGoShop = false;
                                     Mix_PlayChannel(-1, doorS, 0);
+                                    /*
+                                        NOTE: Order in storage
+                                        0 Apple,
+                                        1 Carrot,
+                                        2 Grape,
+                                        3 Potato,
+                                        4 Pumpkin,
+                                        5 Banana,
+                                        Order in shop
+                                        0 banana
+                                        1 apple
+                                        2 grape
+                                        3 pumpkin 
+                                        4 potato
+                                        5 carrot
+                                    */
+                                    shop.sellItems[0].countText.setText(renderer, robotoF, "x" + std::to_string(storage[5].amount));
+                                    shop.sellItems[1].countText.setText(renderer, robotoF, "x" + std::to_string(storage[0].amount));
+                                    shop.sellItems[2].countText.setText(renderer, robotoF, "x" + std::to_string(storage[2].amount));
+                                    shop.sellItems[3].countText.setText(renderer, robotoF, "x" + std::to_string(storage[4].amount));
+                                    shop.sellItems[4].countText.setText(renderer, robotoF, "x" + std::to_string(storage[3].amount));
+                                    shop.sellItems[5].countText.setText(renderer, robotoF, "x" + std::to_string(storage[1].amount));
+                                    if (foods[0] == Food::Apple) {
+                                        if (foods[1] == Food::Apple) {
+                                            shop.sellItems[1].countText.setText(renderer, robotoF, "x" + std::to_string(storage[0].amount + 2));
+                                        }
+                                        else {
+                                            shop.sellItems[1].countText.setText(renderer, robotoF, "x" + std::to_string(storage[0].amount + 1));
+                                        }
+                                    }
+                                    else if (foods[0] == Food::Banana) {
+                                        if (foods[1] == Food::Banana) {
+                                            shop.sellItems[0].countText.setText(renderer, robotoF, "x" + std::to_string(storage[5].amount + 2));
+                                        }
+                                        else {
+                                            shop.sellItems[0].countText.setText(renderer, robotoF, "x" + std::to_string(storage[5].amount + 1));
+                                        }
+                                    }
+                                    else if (foods[0] == Food::Carrot) {
+                                        if (foods[1] == Food::Carrot) {
+                                            shop.sellItems[5].countText.setText(renderer, robotoF, "x" + std::to_string(storage[1].amount + 2));
+                                        }
+                                        else {
+                                            shop.sellItems[5].countText.setText(renderer, robotoF, "x" + std::to_string(storage[1].amount + 1));
+                                        }
+                                    }
+                                    else if (foods[0] == Food::Grape) {
+                                        if (foods[1] == Food::Grape) {
+                                            shop.sellItems[2].countText.setText(renderer, robotoF, "x" + std::to_string(storage[2].amount + 2));
+                                        }
+                                        else {
+                                            shop.sellItems[2].countText.setText(renderer, robotoF, "x" + std::to_string(storage[2].amount + 1));
+                                        }
+                                    }
+                                    else if (foods[0] == Food::Potato) {
+                                        if (foods[1] == Food::Potato) {
+                                            shop.sellItems[4].countText.setText(renderer, robotoF, "x" + std::to_string(storage[3].amount + 2));
+                                        }
+                                        else {
+                                            shop.sellItems[4].countText.setText(renderer, robotoF, "x" + std::to_string(storage[3].amount + 1));
+                                        }
+                                    }
+                                    else if (foods[0] == Food::Pumpkin) {
+                                        if (foods[1] == Food::Pumpkin) {
+                                            shop.sellItems[3].countText.setText(renderer, robotoF, "x" + std::to_string(storage[4].amount + 2));
+                                        }
+                                        else {
+                                            shop.sellItems[3].countText.setText(renderer, robotoF, "x" + std::to_string(storage[4].amount + 1));
+                                        }
+                                    }
+                                    if (foods[0] != foods[1]) {
+                                        if (foods[1] == Food::Apple) {
+                                            shop.sellItems[1].countText.setText(renderer, robotoF, "x" + std::to_string(storage[0].amount + 1));
+                                        }
+                                        else if (foods[1] == Food::Banana) {
+                                            shop.sellItems[0].countText.setText(renderer, robotoF, "x" + std::to_string(storage[5].amount + 1));
+                                        }
+                                        else if (foods[1] == Food::Carrot) {
+                                            shop.sellItems[5].countText.setText(renderer, robotoF, "x" + std::to_string(storage[1].amount + 1));
+                                        }
+                                        else if (foods[1] == Food::Grape) {
+                                            shop.sellItems[2].countText.setText(renderer, robotoF, "x" + std::to_string(storage[2].amount + 1));
+                                        }
+                                        else if (foods[1] == Food::Potato) {
+                                            shop.sellItems[4].countText.setText(renderer, robotoF, "x" + std::to_string(storage[3].amount + 1));
+                                        }
+                                        else if (foods[1] == Food::Pumpkin) {
+                                            shop.sellItems[3].countText.setText(renderer, robotoF, "x" + std::to_string(storage[4].amount + 1));
+                                        }
+                                    }
                                 }
                                 else {
                                     shouldShowWhenCanSleepAndGoShop = true;
@@ -3001,99 +3334,99 @@ gameBegin:
             SDL_RenderPresent(renderer);
         }
         else if (state == State::Paused) {
-        SDL_Event event;
-        while (SDL_PollEvent(&event)) {
-            if (event.type == SDL_QUIT) {
-                running = false;
-                // TODO: On mobile remember to use eventWatch function (it doesn't reach this code when terminating)
-            }
-            if (event.type == SDL_WINDOWEVENT && event.window.event == SDL_WINDOWEVENT_RESIZED) {
-                SDL_RenderSetScale(renderer, event.window.data1 / (float)windowWidth, event.window.data2 / (float)windowHeight);
-            }
-            if (event.type == SDL_KEYDOWN && event.key.keysym.scancode == SDL_SCANCODE_ESCAPE) {
-                if (!pauseKeyPressed) {
-                    pauseKeyPressed = true;
-                    state = pausedState;
+            SDL_Event event;
+            while (SDL_PollEvent(&event)) {
+                if (event.type == SDL_QUIT) {
+                    running = false;
+                    // TODO: On mobile remember to use eventWatch function (it doesn't reach this code when terminating)
                 }
-            }
-            if (event.type == SDL_KEYUP && event.key.keysym.scancode == SDL_SCANCODE_ESCAPE) {
-                if (pauseKeyPressed) {
-                    pauseKeyPressed = false;
+                if (event.type == SDL_WINDOWEVENT && event.window.event == SDL_WINDOWEVENT_RESIZED) {
+                    SDL_RenderSetScale(renderer, event.window.data1 / (float)windowWidth, event.window.data2 / (float)windowHeight);
                 }
-            }
-            if (event.type == SDL_MOUSEBUTTONDOWN) {
-                buttons[event.button.button] = true;
-                for (int i = 0; i < PAUSE_NUM_OPTIONS; ++i) {
-                    if (SDL_PointInFRect(&mousePos, &pauseOptions[i].buttonText.dstR)) {
-                        HandleMenuOption(pauseOptions[i].menuType, state, pausedState, intro, running);
+                if (event.type == SDL_KEYDOWN && event.key.keysym.scancode == SDL_SCANCODE_ESCAPE) {
+                    if (!pauseKeyPressed) {
+                        pauseKeyPressed = true;
+                        state = pausedState;
                     }
                 }
-            }
-            if (event.type == SDL_MOUSEBUTTONUP) {
-                buttons[event.button.button] = false;
-            }
-            if (event.type == SDL_MOUSEMOTION) {
-                float scaleX, scaleY;
-                SDL_RenderGetScale(renderer, &scaleX, &scaleY);
-                mousePos.x = event.motion.x / scaleX;
-                mousePos.y = event.motion.y / scaleY;
-                realMousePos.x = event.motion.x;
-                realMousePos.y = event.motion.y;
+                if (event.type == SDL_KEYUP && event.key.keysym.scancode == SDL_SCANCODE_ESCAPE) {
+                    if (pauseKeyPressed) {
+                        pauseKeyPressed = false;
+                    }
+                }
+                if (event.type == SDL_MOUSEBUTTONDOWN) {
+                    buttons[event.button.button] = true;
+                    for (int i = 0; i < PAUSE_NUM_OPTIONS; ++i) {
+                        if (SDL_PointInFRect(&mousePos, &pauseOptions[i].buttonText.dstR)) {
+                            HandleMenuOption(pauseOptions[i].menuType, state, pausedState, intro, running);
+                        }
+                    }
+                }
+                if (event.type == SDL_MOUSEBUTTONUP) {
+                    buttons[event.button.button] = false;
+                }
+                if (event.type == SDL_MOUSEMOTION) {
+                    float scaleX, scaleY;
+                    SDL_RenderGetScale(renderer, &scaleX, &scaleY);
+                    mousePos.x = event.motion.x / scaleX;
+                    mousePos.y = event.motion.y / scaleY;
+                    realMousePos.x = event.motion.x;
+                    realMousePos.y = event.motion.y;
 
-                for (int i = 0; i < PAUSE_NUM_OPTIONS; ++i) {
-                    if (SDL_PointInFRect(&mousePos, &pauseOptions[i].buttonText.dstR)) {
-                        pauseOptions[i].selected = true;
-                    }
-                    else {
-                        pauseOptions[i].selected = false;
+                    for (int i = 0; i < PAUSE_NUM_OPTIONS; ++i) {
+                        if (SDL_PointInFRect(&mousePos, &pauseOptions[i].buttonText.dstR)) {
+                            pauseOptions[i].selected = true;
+                        }
+                        else {
+                            pauseOptions[i].selected = false;
+                        }
                     }
                 }
             }
-        }
-        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
-        SDL_RenderClear(renderer);
-        RenderMenu(pauseContainer, pauseTitleText, pauseOptions, PAUSE_NUM_OPTIONS);
-        SDL_RenderPresent(renderer);
+            SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
+            SDL_RenderClear(renderer);
+            RenderMenu(pauseContainer, pauseTitleText, pauseOptions, PAUSE_NUM_OPTIONS);
+            SDL_RenderPresent(renderer);
         }
         else if (state == State::Credits) {
-        SDL_Event event;
-        while (SDL_PollEvent(&event)) {
-            if (event.type == SDL_QUIT) {
-                running = false;
-                // TODO: On mobile remember to use eventWatch function (it doesn't reach this code when terminating)
-            }
-            if (event.type == SDL_WINDOWEVENT && event.window.event == SDL_WINDOWEVENT_RESIZED) {
-                SDL_RenderSetScale(renderer, event.window.data1 / (float)windowWidth, event.window.data2 / (float)windowHeight);
-            }
-            if (event.type == SDL_MOUSEBUTTONDOWN) {
-                buttons[event.button.button] = true;
-                if (SDL_PointInFRect(&mousePos, &backButton.buttonText.dstR)) {
-                    HandleMenuOption(backButton.menuType, state, pausedState, intro, running);
+            SDL_Event event;
+            while (SDL_PollEvent(&event)) {
+                if (event.type == SDL_QUIT) {
+                    running = false;
+                    // TODO: On mobile remember to use eventWatch function (it doesn't reach this code when terminating)
                 }
-            }
-            if (event.type == SDL_MOUSEBUTTONUP) {
-                buttons[event.button.button] = false;
-            }
-            if (event.type == SDL_MOUSEMOTION) {
-                float scaleX, scaleY;
-                SDL_RenderGetScale(renderer, &scaleX, &scaleY);
-                mousePos.x = event.motion.x / scaleX;
-                mousePos.y = event.motion.y / scaleY;
-                realMousePos.x = event.motion.x;
-                realMousePos.y = event.motion.y;
+                if (event.type == SDL_WINDOWEVENT && event.window.event == SDL_WINDOWEVENT_RESIZED) {
+                    SDL_RenderSetScale(renderer, event.window.data1 / (float)windowWidth, event.window.data2 / (float)windowHeight);
+                }
+                if (event.type == SDL_MOUSEBUTTONDOWN) {
+                    buttons[event.button.button] = true;
+                    if (SDL_PointInFRect(&mousePos, &backButton.buttonText.dstR)) {
+                        HandleMenuOption(backButton.menuType, state, pausedState, intro, running);
+                    }
+                }
+                if (event.type == SDL_MOUSEBUTTONUP) {
+                    buttons[event.button.button] = false;
+                }
+                if (event.type == SDL_MOUSEMOTION) {
+                    float scaleX, scaleY;
+                    SDL_RenderGetScale(renderer, &scaleX, &scaleY);
+                    mousePos.x = event.motion.x / scaleX;
+                    mousePos.y = event.motion.y / scaleY;
+                    realMousePos.x = event.motion.x;
+                    realMousePos.y = event.motion.y;
 
-                if (SDL_PointInFRect(&mousePos, &backButton.buttonText.dstR)) {
-                    backButton.selected = true;
-                }
-                else {
-                    backButton.selected = false;
+                    if (SDL_PointInFRect(&mousePos, &backButton.buttonText.dstR)) {
+                        backButton.selected = true;
+                    }
+                    else {
+                        backButton.selected = false;
+                    }
                 }
             }
-        }
-        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
-        SDL_RenderClear(renderer);
-        RenderCredits(creditsTitleText, authorsText, authors, externalGraphicsText, egAuthorsTexts, backButton, backRect);
-        SDL_RenderPresent(renderer);
+            SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
+            SDL_RenderClear(renderer);
+            RenderCredits(creditsTitleText, authorsText, authors, externalGraphicsText, egAuthorsTexts, backButton, backRect);
+            SDL_RenderPresent(renderer);
         }
 
         saveData(scoreText, rotDelayInMs, isMuted, maxEnergy);

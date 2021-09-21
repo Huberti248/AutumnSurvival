@@ -77,6 +77,7 @@ using namespace std::chrono_literals;
 #define WARNING_COLOR 255, 0, 0, 255
 #define PART_SPEED 0.1
 #define HUNGER_DECREASE_DELAY_IN_MS 1000
+#define HUNGER_INIT 100
 
 #define BUTTON_SELECTED   \
     {                     \
@@ -1073,7 +1074,7 @@ void readData(Text& scoreText, int& rotDelayInMs, bool& isMuted, int& maxEnergy,
             return $0;
         }
     },
-                                              100));
+                                              HUNGER_INIT));
 #else
     pugi::xml_document doc;
     doc.load_file((prefPath + "data.xml").c_str());
@@ -1091,7 +1092,7 @@ void readData(Text& scoreText, int& rotDelayInMs, bool& isMuted, int& maxEnergy,
     for (int i = 0; i < storage.size(); ++i) {
         storage[i].amount = rootNode.child(("storage" + std::to_string(i)).c_str()).text().as_int();
     }
-    hungerText.setText(renderer, robotoF, rootNode.child("hunger").text().as_int(100));
+    hungerText.setText(renderer, robotoF, rootNode.child("hunger").text().as_int(HUNGER_INIT));
 #endif
 }
 
@@ -2448,7 +2449,7 @@ gameBegin:
     doorR.h = 32;
     doorR.x = 0;
     doorR.y = 0;
-    hungerText.setText(renderer, robotoF, "100");
+    hungerText.setText(renderer, robotoF, HUNGER_INIT);
     hungerText.dstR.w = 100;
     hungerText.dstR.h = 40;
     hungerText.dstR.x = hourText.dstR.x;
@@ -2497,6 +2498,9 @@ gameBegin:
     hungerClock.restart();
     increasedPlayerSpeedClock.restart();
     readData(scoreText, rotDelayInMs, isMuted, maxEnergy, energyText, foods, storage, hungerText);
+    if (std::stoi(hungerText.text) <= 0) {
+        hungerText.setText(renderer, robotoF, HUNGER_INIT);
+    }
     while (running) {
         float deltaTime = globalClock.restart();
         SDL_FRect windowScreenR;

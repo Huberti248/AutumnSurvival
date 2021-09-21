@@ -896,6 +896,7 @@ void HandleMenuOption(MenuOption option, State& gameState, State& pausedState, I
         gameState = pausedState;
         break;
     case MenuOption::Controls:
+        gameState = State::Controls;
         break;
     case MenuOption::Main:
         gameState = State::Main;
@@ -1729,6 +1730,133 @@ void RenderCredits(Text& titleText,
     backButton.buttonText.draw(renderer);
 }
 
+void UpdateStringText(std::vector<std::string>& stringList, float letterWidth) {
+    std::vector<std::string> newString;
+    int maxChars = static_cast<int>((windowWidth - SCREEN_PADDING * 2) / letterWidth);
+    for (int i = 0; i < stringList.size(); i++) {
+        if (stringList[i].length() > maxChars) {
+            std::istringstream words(stringList[i]);
+            std::string line;
+            std::string nextWord;
+            words >> line;
+            while (words >> nextWord) {
+                if ((line.length() + nextWord.length() + 1) < maxChars) {
+                    line += ' ' + nextWord;
+                }
+                else {
+                    newString.push_back(line);
+                    line = nextWord;
+                }
+            }
+            newString.push_back(line);
+        }
+        else {
+            newString.push_back(stringList[i]);
+        }
+    }
+
+    stringList.clear();
+    stringList = newString;
+    newString.clear();
+}
+
+void ControlsInit(Text& controlsText,
+    std::vector<Text>& controls,
+    Text& goalTitleText,
+    std::vector<Text>& goalTexts) 
+{    
+    float letterWidth = 30 / 50.0f * LETTER_WIDTH;
+    
+    goalTitleText.setText(renderer, robotoF, "Goal", { 0, 255, 0 });
+    goalTitleText.dstR.w = goalTitleText.text.length() * LETTER_WIDTH;
+    goalTitleText.dstR.h = 50;
+    goalTitleText.dstR.x = windowWidth / 2 - goalTitleText.dstR.w / 2;
+    goalTitleText.dstR.y = 0;
+
+    std::vector<std::string> goalString =
+    {
+        "Harvest produce to survive the autumn days. However, if you eat too much of the same fruit, you will get sick so manage your produce wisely."
+    };
+    UpdateStringText(goalString, letterWidth);
+
+    goalTexts.push_back(Text());
+    goalTexts.back().setText(renderer, robotoF, "");
+    goalTexts.back().dstR.w = 0;
+    goalTexts.back().dstR.h = 30;
+    goalTexts.back().dstR.x = SCREEN_PADDING;
+    goalTexts.back().dstR.y = goalTitleText.dstR.y + goalTitleText.dstR.h - goalTexts.back().dstR.h;
+
+
+    for (int i = 0; i < goalString.size(); i++) {
+        goalTexts.push_back(goalTexts.back());
+        goalTexts.back().setText(renderer, robotoF, goalString[i]);
+        goalTexts[i + 1].dstR.w = goalTexts[i + 1].text.length() * letterWidth;
+        goalTexts[i + 1].dstR.y = goalTexts[i].dstR.y + goalTexts[i].dstR.h;
+    }
+
+    controlsText.dstR.w = std::string("Controls").length() * LETTER_WIDTH;
+    controlsText.dstR.h = 50;
+    controlsText.dstR.x = windowWidth / 2 - controlsText.dstR.w / 2;
+    controlsText.dstR.y = goalTexts.back().dstR.y + goalTexts.back().dstR.h + 50;
+    controlsText.setText(renderer, robotoF, "Controls", { 255, 0, 0 });
+
+    std::vector<std::string> controlsString =
+    {
+        "- WASD = Movement",
+        "- SPACE = Interact with objects",
+        "- LEFT-CLICK = Interact with UI",
+        "- RIGHT-CLICK = Eat produce",
+        "",
+        "Controls will appear at the bottom of the screen if the object is interactable."
+    };
+    UpdateStringText(controlsString, letterWidth);
+
+    controls.push_back(Text());
+    controls.back().setText(renderer, robotoF, "");
+    controls.back().dstR.w = controls.back().text.length() * LETTER_WIDTH;
+    controls.back().dstR.h = 30;
+    controls.back().dstR.x = SCREEN_PADDING;
+    controls.back().dstR.y = controlsText.dstR.y + controlsText.dstR.h - controls.back().dstR.h;
+
+
+    for (int i = 0; i < controlsString.size(); i++) {
+        controls.push_back(controls.back());
+        controls.back().setText(renderer, robotoF, controlsString[i]);
+        controls[i + 1].dstR.w = controls[i + 1].text.length() * letterWidth;
+        controls[i + 1].dstR.y = controls[i].dstR.y + controls[i].dstR.h;
+    }
+}
+
+void RenderControls(Text& controlsText,
+    std::vector<Text>& controls,
+    Text& goalTitleText,
+    std::vector<Text>& goalTexts,
+    MenuButton& backButton,
+    SDL_FRect& backRect)
+{
+    controlsText.draw(renderer);
+
+    for (auto& text : controls) {
+        text.draw(renderer);
+    }
+    goalTitleText.draw(renderer);
+    for (auto& text : goalTexts) {
+        text.draw(renderer);
+    }
+
+    SDL_SetRenderDrawColor(renderer, 44, 27, 46, SDL_ALPHA_OPAQUE);
+    SDL_RenderFillRectF(renderer, &backRect);
+
+    if (backButton.selected) {
+        backButton.buttonText.setText(renderer, robotoF, backButton.label, BUTTON_SELECTED);
+    }
+    else {
+        backButton.buttonText.setText(renderer, robotoF, backButton.label, BUTTON_UNSELECTED);
+    }
+
+    backButton.buttonText.draw(renderer);
+}
+
 void moveTimeByOneHour(Clock& timeClock, int& hour, Text& hourText, int& sickLevel, bool& alreadySick)
 {
     if (timeClock.getElapsedTime() > 1000) {
@@ -2538,6 +2666,10 @@ gameBegin:
     actionR.h = 64;
     actionR.x = upR.x - actionR.w - 15;
     actionR.y = upR.y - actionR.h - 15;
+    Text controlsTitleText;
+    std::vector<Text> controls;
+    Text goalTitleText;
+    std::vector<Text> goalText;
 
     soundBtnR.w = 48;
     soundBtnR.h = 48;
@@ -2698,6 +2830,7 @@ gameBegin:
     MenuInit(pauseContainer, pauseTitleText, "Paused", pauseOptions, PAUSE_NUM_OPTIONS, PAUSE_MENU_BUTTON_PADDING, pauseLabels, pauseMenuTypes);
     MenuInit(mainContainer, mainTitleText, "Autumn Survival", mainOptions, MAINMENU_NUM_OPTIONS, MAINMENU_BUTTON_PADDING, mainLabels, mainMenuTypes);
     CreditsInit(creditsTitleText, authorsText, authors, externalGraphicsText, egAuthorsTexts, backButton, backRect);
+    ControlsInit(controlsTitleText, controls, goalTitleText, goalText);
     for (auto& food : foods) {
         food = Food::Empty;
     }
@@ -3859,6 +3992,46 @@ gameBegin:
             SDL_RenderClear(renderer);
             RenderCredits(creditsTitleText, authorsText, authors, externalGraphicsText, egAuthorsTexts, backButton, backRect);
             SDL_RenderPresent(renderer);
+        }
+        else if (state == State::Controls) {
+        SDL_Event event;
+        while (SDL_PollEvent(&event)) {
+            if (event.type == SDL_QUIT) {
+                running = false;
+                // TODO: On mobile remember to use eventWatch function (it doesn't reach this code when terminating)
+            }
+            if (event.type == SDL_WINDOWEVENT && event.window.event == SDL_WINDOWEVENT_RESIZED) {
+                SDL_RenderSetScale(renderer, event.window.data1 / (float)windowWidth, event.window.data2 / (float)windowHeight);
+            }
+            if (event.type == SDL_MOUSEBUTTONDOWN) {
+                buttons[event.button.button] = true;
+                if (SDL_PointInFRect(&mousePos, &backButton.buttonText.dstR)) {
+                    HandleMenuOption(backButton.menuType, state, pausedState, intro, running);
+                }
+            }
+            if (event.type == SDL_MOUSEBUTTONUP) {
+                buttons[event.button.button] = false;
+            }
+            if (event.type == SDL_MOUSEMOTION) {
+                float scaleX, scaleY;
+                SDL_RenderGetScale(renderer, &scaleX, &scaleY);
+                mousePos.x = event.motion.x / scaleX;
+                mousePos.y = event.motion.y / scaleY;
+                realMousePos.x = event.motion.x;
+                realMousePos.y = event.motion.y;
+
+                if (SDL_PointInFRect(&mousePos, &backButton.buttonText.dstR)) {
+                    backButton.selected = true;
+                }
+                else {
+                    backButton.selected = false;
+                }
+            }
+        }
+        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
+        SDL_RenderClear(renderer);
+        RenderControls(controlsTitleText, controls, goalTitleText, goalText, backButton, backRect);
+        SDL_RenderPresent(renderer);
         }
 
         controlsText.dstR.y = windowHeight - controlsText.dstR.h;

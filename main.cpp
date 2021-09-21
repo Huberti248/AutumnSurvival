@@ -2902,12 +2902,10 @@ gameBegin:
                     if (SDL_PointInFRect(&mousePos, &inventorySlotX2R)) {
                         foods[1] = Food::Empty;
                     }
-                    if (event.button.button == SDL_BUTTON_RIGHT) {
-                        Food eaten = eat(inventorySlotR, inventorySlot2R, energyText, playerSpeed, increasedPlayerSpeedClock, foods, hungerText);
-                        UpdateSickFactor(eaten, foodSicknessScore, sickLevel, alreadySick);
-                        if (std::stoi(energyText.text) > 0) {
-                            shouldGoHome = false;
-                        }
+                    Food eaten = eat(inventorySlotR, inventorySlot2R, energyText, playerSpeed, increasedPlayerSpeedClock, foods, hungerText);
+                    UpdateSickFactor(eaten, foodSicknessScore, sickLevel, alreadySick);
+                    if (std::stoi(energyText.text) > 0) {
+                        shouldGoHome = false;
                     }
                     if (SDL_PointInFRect(&mousePos, &actionR)) {
                         onSpaceInOutsideState(hour, canCollect, foods, state, plots, player, parts);
@@ -3402,13 +3400,11 @@ gameBegin:
                             unmuteMusicAndSounds();
                         }
                     }
-                    if (event.button.button == SDL_BUTTON_RIGHT) {
-                        Food eaten = eat(inventorySlotR, inventorySlot2R, energyText, playerSpeed, increasedPlayerSpeedClock, foods, hungerText);
-                        UpdateSickFactor(eaten, foodSicknessScore, sickLevel, alreadySick);
-                        if (std::stoi(energyText.text) > 0) {
-                            shouldShowInfoTextAboutNotEnoughEnergy = false;
-                            shouldGoHome = false;
-                        }
+                    Food eaten = eat(inventorySlotR, inventorySlot2R, energyText, playerSpeed, increasedPlayerSpeedClock, foods, hungerText);
+                    UpdateSickFactor(eaten, foodSicknessScore, sickLevel, alreadySick);
+                    if (std::stoi(energyText.text) > 0) {
+                        shouldShowInfoTextAboutNotEnoughEnergy = false;
+                        shouldGoHome = false;
                     }
                     if (SDL_PointInFRect(&mousePos, &actionR)) {
                         onSpaceInHomeState(player, hour, state, shouldShowWhenCanSleepAndGoShop, foods, shop, storage, doorI, shouldGoHome,

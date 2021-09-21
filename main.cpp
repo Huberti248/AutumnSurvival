@@ -2723,6 +2723,9 @@ gameBegin:
                     if (event.button.button == SDL_BUTTON_RIGHT) {
                         Food eaten = eat(inventorySlotR, inventorySlot2R, energyText, playerSpeed, increasedPlayerSpeedClock, foods, hungerText);
                         UpdateSickFactor(eaten, foodSicknessScore, sickLevel, alreadySick);
+                        if (std::stoi(energyText.text) > 0) {
+                            shouldGoHome = false;
+                        }
                     }
                 }
                 if (event.type == SDL_MOUSEBUTTONUP) {

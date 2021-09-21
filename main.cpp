@@ -2693,7 +2693,10 @@ gameBegin:
                     if (std::stoi(energyText.text) != 0) {
                         energyText.setText(renderer, robotoF, std::stoi(energyText.text) - 1);
                         if (sickLevel != 0) {
-                            energyText.setText(renderer, robotoF, std::stoi(energyText.text) - static_cast<int>(sickLevel * ENERGY_SICK_FACTOR));
+                            energyText.setText(renderer, robotoF, std::stoi(energyText.text) + static_cast<int>(sickLevel * ENERGY_SICK_FACTOR));
+                            if (std::stoi(energyText.text) < 0) {
+                                energyText.setText(renderer, robotoF, 0);
+                            }
                         }
                     }
                     if (energyText.text == "0") {
@@ -3285,7 +3288,10 @@ gameBegin:
                 if (std::stoi(hungerText.text) > 0) {
                     hungerText.setText(renderer, robotoF, std::stoi(hungerText.text) - 1);
                     if (sickLevel != 0) {
-                        hungerText.setText(renderer, robotoF, std::stoi(hungerText.text) - static_cast<int>(sickLevel * HUNGER_SICK_FACTOR));
+                        hungerText.setText(renderer, robotoF, std::stoi(hungerText.text) + static_cast<int>(sickLevel * HUNGER_SICK_FACTOR));
+                        if (std::stoi(energyText.text) < 0) {
+                            energyText.setText(renderer, robotoF, 0);
+                        }
                     }
                     if (std::stoi(hungerText.text) <= 0) {
                         state = State::Gameover;

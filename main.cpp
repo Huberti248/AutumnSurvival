@@ -160,6 +160,7 @@ SDL_Texture* windowT;
 SDL_Texture* hungerT;
 SDL_Texture* carrotSoilT;
 SDL_Texture* potatoSoilT;
+SDL_Texture* sickT;
 Mix_Music* josephKosmaM;
 Mix_Music* antonioVivaldiM;
 Mix_Chunk* doorS;
@@ -1022,6 +1023,8 @@ void RenderUI(Text scoreText,
     bool isMoving,
     Clock& playerAnimationClock,
     Text hungerText,
+    Text sickText,
+    int sickLevel,
     SDL_FRect inventorySlotR,
     SDL_FRect inventorySlot2R,
     std::array<Food, 2> foods,
@@ -1076,6 +1079,15 @@ void RenderUI(Text scoreText,
     hungerR.x = hungerText.dstR.x - hungerR.w;
     hungerR.y = hungerText.dstR.y + hungerText.dstR.h / 2 - hungerR.h / 2;
     SDL_RenderCopyF(renderer, hungerT, 0, &hungerR);
+
+    sickText.setText(renderer, robotoF, "x" + std::to_string(sickLevel));
+    sickText.draw(renderer);
+    SDL_FRect sickR;
+    sickR.w = 32;
+    sickR.h = 32;
+    sickR.x = sickText.dstR.x - sickR.w;
+    sickR.y = sickText.dstR.y + sickText.dstR.h / 2.0f - sickR.h / 2.0f;
+    SDL_RenderCopyF(renderer, sickT, 0, &sickR);
 }
 
 int ClosestNumber(int total, int size)
@@ -1181,6 +1193,8 @@ void RenderHome(SDL_FRect homeGround,
     bool isMoving,
     Clock& playerAnimationClock,
     Text hungerText,
+    Text sickText,
+    int sickLevel,
     SDL_FRect inventorySlotR,
     SDL_FRect inventorySlot2R,
     std::array<Food, 2> foods,
@@ -1255,7 +1269,7 @@ void RenderHome(SDL_FRect homeGround,
     actionText.dstR.x = windowWidth / 2.0f - actionText.dstR.w / 2.0f;
     actionText.draw(renderer);
 
-    RenderUI(scoreText, isMuted, soundBtnR, hourText, energyText, hour, sunR, energyR, playerDirection, playerAnimationFrames, playerAnimationFrame, player, isMoving, playerAnimationClock, hungerText, inventorySlotR, inventorySlot2R, foods, inventorySlotXR, inventorySlotX2R);
+    RenderUI(scoreText, isMuted, soundBtnR, hourText, energyText, hour, sunR, energyR, playerDirection, playerAnimationFrames, playerAnimationFrame, player, isMoving, playerAnimationClock, hungerText, sickText, sickLevel, inventorySlotR, inventorySlot2R, foods, inventorySlotXR, inventorySlotX2R);
     if (shouldShowInfoText) {
         infoTextAboutNotEnoughEnergy.draw(renderer);
     }
@@ -1452,17 +1466,21 @@ void CreditsInit(Text& titleText,
     externalGraphicsText.dstR.y = authors.back().dstR.y + authors.back().dstR.h + 50;
     
     egAuthorsTexts.push_back(Text());
-    egAuthorsTexts.back().setText(renderer, robotoF, "Becris");
+    egAuthorsTexts.back().setText(renderer, robotoF, "Antonio Vivaldi - Music");
     egAuthorsTexts.back().dstR.w = egAuthorsTexts.back().text.length() * (LETTER_WIDTH / 50.0f * 25);
     egAuthorsTexts.back().dstR.h = 25;
     egAuthorsTexts.back().dstR.x = windowWidth / 3.0f - egAuthorsTexts.back().dstR.w / 2;
     egAuthorsTexts.back().dstR.y = externalGraphicsText.dstR.y + externalGraphicsText.dstR.h;
+    egAuthorsTexts.push_back(egAuthorsTexts.back());
+    egAuthorsTexts.back().setText(renderer, robotoF, "Becris");
     egAuthorsTexts.push_back(egAuthorsTexts.back());
     egAuthorsTexts.back().setText(renderer, robotoF, "Eucalyp");
     egAuthorsTexts.push_back(egAuthorsTexts.back());
     egAuthorsTexts.back().setText(renderer, robotoF, "Freepik");
     egAuthorsTexts.push_back(egAuthorsTexts.back());
     egAuthorsTexts.back().setText(renderer, robotoF, "Icongeek26");
+    egAuthorsTexts.push_back(egAuthorsTexts.back());
+    egAuthorsTexts.back().setText(renderer, robotoF, "Joseph Kosma - Music"); 
     egAuthorsTexts.push_back(egAuthorsTexts.back());
     egAuthorsTexts.back().setText(renderer, robotoF, "marcelofg55");
     egAuthorsTexts.push_back(egAuthorsTexts.back());
@@ -1853,6 +1871,7 @@ gameBegin:
     hungerT = IMG_LoadTexture(renderer, "res/hunger.png");
     carrotSoilT = IMG_LoadTexture(renderer, "res/carrotSoil.png");
     potatoSoilT = IMG_LoadTexture(renderer, "res/potatoSoil.png");
+    sickT = IMG_LoadTexture(renderer, "res/sick.png");
     josephKosmaM = Mix_LoadMUS("res/autumnLeavesJosephKosma.mp3");
     antonioVivaldiM = Mix_LoadMUS("res/jesienAntonioVivaldi.mp3");
     doorS = Mix_LoadWAV("res/door.wav");
@@ -2002,7 +2021,7 @@ gameBegin:
     std::vector<int> foodSicknessScore(static_cast<int>(Food::NumFood), 0);
     int sickLevel = 0;
     bool alreadySick = false;
-    bool newDay = true;
+    Text sickText;
 
     soundBtnR.w = 48;
     soundBtnR.h = 48;
@@ -2139,6 +2158,11 @@ gameBegin:
     hungerText.dstR.h = 40;
     hungerText.dstR.x = hourText.dstR.x;
     hungerText.dstR.y = hourText.dstR.y + hourText.dstR.h;
+    sickText.setText(renderer, robotoF, "100");
+    sickText.dstR.w = 100;
+    sickText.dstR.h = 40;
+    sickText.dstR.x = hourText.dstR.x;
+    sickText.dstR.y = hungerText.dstR.y + hungerText.dstR.h;
     gameOverText.setText(renderer, robotoF, "Game over");
     gameOverText.dstR.w = 400;
     gameOverText.dstR.h = 100;
@@ -2611,7 +2635,7 @@ gameBegin:
             SDL_SetRenderTarget(renderer, 0);
             SDL_RenderCopy(renderer, resultLayerT, 0, 0);
             DrawInventory(inventorySlotR, inventorySlot2R, foods, inventorySlotXR, inventorySlotX2R);
-            RenderUI(scoreText, isMuted, soundBtnR, hourText, energyText, hour, sunR, energyR, playerDirection, playerAnimationFrames, playerAnimationFrame, player, isMoving, playerAnimationClock, hungerText, inventorySlotR, inventorySlot2R, foods, inventorySlotXR, inventorySlotX2R);
+            RenderUI(scoreText, isMuted, soundBtnR, hourText, energyText, hour, sunR, energyR, playerDirection, playerAnimationFrames, playerAnimationFrame, player, isMoving, playerAnimationClock, hungerText, sickText, sickLevel, inventorySlotR, inventorySlot2R, foods, inventorySlotXR, inventorySlotX2R);
             if (!canCollect) {
                 cantCollectText.draw(renderer);
             }
@@ -2898,7 +2922,7 @@ gameBegin:
             RenderHome(homeGround, tile, homeWall, homeSeparator, hour, windowR, bedI, doorI, shopI, chestI,
                 actionText, currentAction, shouldShowInfoTextAboutNotEnoughEnergy, infoTextAboutNotEnoughEnergy, shouldShowWhenCanSleepAndGoShop, canSleepAndGoShopText, scoreText, isMuted,
                 soundBtnR, hourText, energyText, sunR, energyR, playerDirection, playerAnimationFrames, playerAnimationFrame, player, isMoving,
-                playerAnimationClock, hungerText, inventorySlotR, inventorySlot2R, foods, inventorySlotXR, inventorySlotX2R);
+                playerAnimationClock, hungerText, sickText, sickLevel, inventorySlotR, inventorySlot2R, foods, inventorySlotXR, inventorySlotX2R);
             SDL_RenderPresent(renderer);
         }
         else if (state == State::Minigame) {

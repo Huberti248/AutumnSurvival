@@ -922,8 +922,44 @@ void unmuteMusicAndSounds()
     Mix_Volume(-1, 128);
 }
 
-void saveData(Text scoreText, int rotDelayInMs, bool isMuted, int maxEnergy)
+void saveData(Text scoreText, int rotDelayInMs, bool isMuted, int maxEnergy, std::array<Food, 2>& foods, std::vector<StorageUI>& storage, Text& hungerText)
 {
+#ifdef __EMSCRIPTEN__
+    EM_ASM({
+        localStorage.setItem("score", $0);
+    },
+        std::stoi(scoreText.text));
+    EM_ASM({
+        localStorage.setItem("rotDelayInMs", $0);
+    },
+        rotDelayInMs);
+    EM_ASM({
+        localStorage.setItem("isMuted", $0);
+    },
+        isMuted);
+    EM_ASM({
+        localStorage.setItem("maxEnergy", $0);
+    },
+        maxEnergy);
+    EM_ASM({
+        localStorage.setItem("inventory", $0);
+    },
+        (int)foods[0]);
+    EM_ASM({
+        localStorage.setItem("inventory2", $0);
+    },
+        (int)foods[1]);
+    for (int i = 0; i < storage.size(); ++i) {
+        EM_ASM({
+            localStorage.setItem("storage" + $1, $0);
+        },
+            storage[i].amount, i);
+    }
+    EM_ASM({
+        localStorage.setItem("hunger", $0);
+    },
+        std::stoi(hungerText.text));
+#else
     pugi::xml_document doc;
     pugi::xml_node rootNode = doc.append_child("root");
     pugi::xml_node scoreNode = rootNode.append_child("score");
@@ -934,12 +970,111 @@ void saveData(Text scoreText, int rotDelayInMs, bool isMuted, int maxEnergy)
     isMutedNode.append_child(pugi::node_pcdata).set_value(std::to_string(isMuted).c_str());
     pugi::xml_node maxEnergyNode = rootNode.append_child("maxEnergy");
     maxEnergyNode.append_child(pugi::node_pcdata).set_value(std::to_string(maxEnergy).c_str());
+    pugi::xml_node inventoryNode = rootNode.append_child("inventory");
+    inventoryNode.append_child(pugi::node_pcdata).set_value(std::to_string((int)foods[0]).c_str());
+    pugi::xml_node inventory2Node = rootNode.append_child("inventory2");
+    inventory2Node.append_child(pugi::node_pcdata).set_value(std::to_string((int)foods[1]).c_str());
+    for (int i = 0; i < storage.size(); ++i) {
+        pugi::xml_node storageNode = rootNode.append_child(("storage" + std::to_string(i)).c_str());
+        storageNode.append_child(pugi::node_pcdata).set_value(std::to_string(storage[i].amount).c_str());
+    }
+    pugi::xml_node hungerNode = rootNode.append_child("hunger");
+    hungerNode.append_child(pugi::node_pcdata).set_value(hungerText.text.c_str());
     doc.save_file((prefPath + "data.xml").c_str());
-    // TODO: When adding emscripten add their saveing
+#endif
 }
 
-void readData(Text& scoreText, int& rotDelayInMs, bool& isMuted, int& maxEnergy, Text& energyText)
+void readData(Text& scoreText, int& rotDelayInMs, bool& isMuted, int& maxEnergy, Text& energyText, std::array<Food, 2>& foods, std::vector<StorageUI>& storage, Text& hungerText)
 {
+#ifdef __EMSCRIPTEN__
+    scoreText.setText(renderer, robotoF,
+        EM_ASM_INT({
+            var s = localStorage.getItem("score");
+            if (s) {
+                return s;
+            }
+            else {
+                return $0;
+            }
+        },
+            0),
+        {});
+    rotDelayInMs = EM_ASM_INT({
+        var s = localStorage.getItem("leafRotDelayInMs");
+        if (s) {
+            return s;
+        }
+        else {
+            return $0;
+        }
+    },
+        ROT_INIT_DELAY_IN_MS);
+    isMuted = EM_ASM_INT({
+        var s = localStorage.getItem("isMuted");
+        if (s) {
+            return s;
+        }
+        else {
+            return $0;
+        }
+    },
+        0);
+    if (isMuted) {
+        muteMusicAndSounds();
+    }
+    maxEnergy = EM_ASM_INT({
+        var s = localStorage.getItem("maxEnergy");
+        if (s) {
+            return s;
+        }
+        else {
+            return $0;
+        }
+    },
+        MAX_ENERGY_INIT);
+    foods[0] = (Food)EM_ASM_INT({
+        var s = localStorage.getItem("inventory");
+        if (s) {
+            return s;
+        }
+        else {
+            return $0;
+        }
+    },
+        (int)Food::Empty);
+    foods[1] = (Food)EM_ASM_INT({
+        var s = localStorage.getItem("inventory2");
+        if (s) {
+            return s;
+        }
+        else {
+            return $0;
+        }
+    },
+        (int)Food::Empty);
+    for (int i = 0; i < storage.size(); ++i) {
+        storage[i].amount = EM_ASM_INT({
+            var s = localStorage.getItem("storage" + $1);
+            if (s) {
+                return s;
+            }
+            else {
+                return $0;
+            }
+        },
+            0, i);
+    }
+    hungerText.setText(renderer, robotoF, EM_ASM_INT({
+        var s = localStorage.getItem("hunger");
+        if (s) {
+            return s;
+        }
+        else {
+            return $0;
+        }
+    },
+                                              100));
+#else
     pugi::xml_document doc;
     doc.load_file((prefPath + "data.xml").c_str());
     pugi::xml_node rootNode = doc.child("root");
@@ -951,6 +1086,13 @@ void readData(Text& scoreText, int& rotDelayInMs, bool& isMuted, int& maxEnergy,
     }
     maxEnergy = rootNode.child("maxEnergy").text().as_int(MAX_ENERGY_INIT);
     energyText.setText(renderer, robotoF, maxEnergy);
+    foods[0] = (Food)rootNode.child("inventory").text().as_int((int)Food::Empty);
+    foods[1] = (Food)rootNode.child("inventory2").text().as_int((int)Food::Empty);
+    for (int i = 0; i < storage.size(); ++i) {
+        storage[i].amount = rootNode.child(("storage" + std::to_string(i)).c_str()).text().as_int();
+    }
+    hungerText.setText(renderer, robotoF, rootNode.child("hunger").text().as_int(100));
+#endif
 }
 
 float clamp(float n, float lower, float upper)
@@ -2354,7 +2496,7 @@ gameBegin:
     playerAnimationClock.restart();
     hungerClock.restart();
     increasedPlayerSpeedClock.restart();
-    readData(scoreText, rotDelayInMs, isMuted, maxEnergy, energyText);
+    readData(scoreText, rotDelayInMs, isMuted, maxEnergy, energyText, foods, storage, hungerText);
     while (running) {
         float deltaTime = globalClock.restart();
         SDL_FRect windowScreenR;
@@ -3673,7 +3815,7 @@ gameBegin:
 
         controlsText.dstR.y = windowHeight - controlsText.dstR.h;
         keyControlsText.dstR.y = controlsText.dstR.y;
-        saveData(scoreText, rotDelayInMs, isMuted, maxEnergy);
+        saveData(scoreText, rotDelayInMs, isMuted, maxEnergy, foods, storage, hungerText);
     }
     // TODO: On mobile remember to use eventWatch function (it doesn't reach this code when terminating)
     return 0;

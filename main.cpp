@@ -2925,22 +2925,6 @@ gameBegin:
                 houseflyR.y = rotR.y + rotR.h - houseflyR.h;
             }
             SDL_RenderCopyF(renderer, houseT, 0, &houseR);
-            if (isCollecting) {
-                //SDL_RenderCopyF(renderer, collectT, 0, &collectR);
-                RenderInstructions(controlsText, "Collect", keyControlsText, "SPACE: ");
-            }
-            if (SDL_HasIntersectionF(&houseR, &player.r)) {
-                RenderInstructions(controlsText, "Enter", keyControlsText, "SPACE: ");
-            }
-            if (SDL_PointInFRect(&mousePos, &inventorySlotXR) || SDL_PointInFRect(&mousePos, &inventorySlotX2R)) {
-                RenderInstructions(controlsText, "Delete", keyControlsText, "LEFT-CLICK: ");
-            }
-            if (SDL_PointInFRect(&mousePos, &inventorySlotR) && foods[0] != Food::Empty) {
-                RenderInstructions(controlsText, "Eat", keyControlsText, "RIGHT-CLICK: ");
-            }
-            if (SDL_PointInFRect(&mousePos, &inventorySlot2R) && foods[1] != Food::Empty) {
-                RenderInstructions(controlsText, "Eat", keyControlsText, "RIGHT-CLICK: ");
-            }
 
             SDL_SetRenderTarget(renderer, 0);
 
@@ -2971,6 +2955,22 @@ gameBegin:
 
             SDL_SetRenderTarget(renderer, 0);
             SDL_RenderCopy(renderer, resultLayerT, 0, 0);
+            if (isCollecting) {
+                //SDL_RenderCopyF(renderer, collectT, 0, &collectR);
+                RenderInstructions(controlsText, "Collect", keyControlsText, "SPACE: ");
+            }
+            if (SDL_HasIntersectionF(&houseR, &player.r)) {
+                RenderInstructions(controlsText, "Enter", keyControlsText, "SPACE: ");
+            }
+            if (SDL_PointInFRect(&mousePos, &inventorySlotXR) || SDL_PointInFRect(&mousePos, &inventorySlotX2R)) {
+                RenderInstructions(controlsText, "Delete", keyControlsText, "LEFT-CLICK: ");
+            }
+            if (SDL_PointInFRect(&mousePos, &inventorySlotR) && foods[0] != Food::Empty) {
+                RenderInstructions(controlsText, "Eat", keyControlsText, "RIGHT-CLICK: ");
+            }
+            if (SDL_PointInFRect(&mousePos, &inventorySlot2R) && foods[1] != Food::Empty) {
+                RenderInstructions(controlsText, "Eat", keyControlsText, "RIGHT-CLICK: ");
+            }
             DrawInventory(inventorySlotR, inventorySlot2R, foods, inventorySlotXR, inventorySlotX2R);
             RenderUI(scoreText, isMuted, soundBtnR, hourText, energyText, hour, sunR, energyR, playerDirection, playerAnimationFrames, playerAnimationFrame, player, isMoving, playerAnimationClock, hungerText, sickText, sickLevel, inventorySlotR, inventorySlot2R, foods, inventorySlotXR, inventorySlotX2R);
             if (!canCollect) {

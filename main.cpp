@@ -86,11 +86,18 @@ using namespace std::chrono_literals;
     {                          \
         209, 180, 140, 255     \
     }
+#define BUTTON_HIGHLIGHTED \
+    {                          \
+        212, 110, 51, 255     \
+    }
 #define LETTER_WIDTH 25
 #define PAUSE_NUM_OPTIONS 3
 #define PAUSE_MENU_BUTTON_PADDING 15
 #define MAINMENU_NUM_OPTIONS 4
 #define MAINMENU_BUTTON_PADDING 15
+#define MAX_SICKNESS_SCORE 10
+#define ENERGY_SICK_FACTOR 2
+#define HUNGER_SICK_FACTOR 3
 
 int windowWidth = 800;
 int windowHeight = 600;
@@ -771,6 +778,7 @@ struct StorageUI {
     int amount = 0;
     bool isChest;
     Food foodType;
+    bool selected = false;
 
     void init(SDL_FRect r, Food foodType, bool isChest = true)
     {
@@ -792,8 +800,15 @@ struct StorageUI {
 
     void draw(SDL_Renderer* renderer)
     {
-        SDL_SetRenderDrawColor(renderer, 255, 255, 255, SDL_ALPHA_OPAQUE);
-        SDL_RenderDrawRectF(renderer, &container);
+        
+        if (selected) {
+            SDL_SetRenderDrawColor(renderer, 212, 110, 51, SDL_ALPHA_OPAQUE);
+            SDL_RenderFillRectF(renderer, &container);
+        }
+        else {
+            SDL_SetRenderDrawColor(renderer, 255, 255, 255, SDL_ALPHA_OPAQUE);
+            SDL_RenderDrawRectF(renderer, &container);
+        }
         if (foodType != Food::Empty) {
             SDL_RenderCopyF(renderer, GetFoodTexture(foodType), 0, &imgContainer);
             std::string textAmount = "X" + std::to_string(amount);
@@ -1252,6 +1267,7 @@ void RenderHome(SDL_FRect homeGround,
 void StorageInit(SDL_FRect& container,
     Text& inventoryTitleText,
     Text& titleText,
+    Text& hungerText,
     std::vector<StorageUI>& storage,
     std::vector<SDL_FRect>& storageInventory)
 {
@@ -1259,6 +1275,10 @@ void StorageInit(SDL_FRect& container,
     container.h = windowHeight * 0.8f;
     container.x = windowWidth / 2.0f - container.w / 2.0f;
     container.y = windowHeight / 2.0f - container.h / 2.0f;
+
+    hungerText.dstR.h = 50;
+    hungerText.dstR.x = windowWidth / 2.0f - hungerText.dstR.w / 2.0f;
+    hungerText.dstR.y = container.y - hungerText.dstR.h;
 
     titleText.setText(renderer, robotoF, "Storage", { 255, 0, 0 });
     titleText.dstR.w = clamp(titleText.text.length() * LETTER_WIDTH, 0, container.w * 0.8f);
@@ -1300,20 +1320,35 @@ void StorageInit(SDL_FRect& container,
 void RenderStorage(SDL_FRect& container,
     Text& hoverText,
     Text& titleText,
+    Text& hungerText,
+    std::string hungerAmount,
     std::vector<StorageUI>& storage,
     std::vector<SDL_FRect>& storageInventory,
-    std::array<Food, 2> foods)
+    std::array<Food, 2>& foods,
+    std::array<bool, 2>& foodSelected)
 {
     SDL_SetRenderDrawColor(renderer, 0, 0, 0, SDL_ALPHA_OPAQUE);
     SDL_RenderFillRectF(renderer, &container);
     titleText.draw(renderer);
     hoverText.draw(renderer);
+
+    hungerText.setText(renderer, robotoF, "Hunger: " + hungerAmount);
+    hungerText.dstR.w = hungerText.text.length() * LETTER_WIDTH;
+    hungerText.dstR.x = windowWidth / 2.0f - hungerText.dstR.w / 2.0f;
+    hungerText.draw(renderer);
+
     for (auto& s : storage) {
         s.draw(renderer);
     }
     for (int i = 0; i < storageInventory.size(); i++) {
-        SDL_SetRenderDrawColor(renderer, 255, 255, 255, SDL_ALPHA_OPAQUE);
-        SDL_RenderDrawRectF(renderer, &storageInventory[i]);
+        if (foodSelected[i]) {
+            SDL_SetRenderDrawColor(renderer, 212, 110, 51, SDL_ALPHA_OPAQUE);
+            SDL_RenderFillRectF(renderer, &storageInventory[i]);
+        }
+        else {
+            SDL_SetRenderDrawColor(renderer, 255, 255, 255, SDL_ALPHA_OPAQUE);
+            SDL_RenderDrawRectF(renderer, &storageInventory[i]);
+        }
         if (foods[i] != Food::Empty) {
             SDL_FRect imgContainer;
             imgContainer.w = storageInventory[i].w * 0.9f;
@@ -1501,11 +1536,13 @@ void RenderCredits(Text& titleText,
     backButton.buttonText.draw(renderer);
 }
 
-void moveTimeByOneHour(Clock& timeClock, int& hour, Text& hourText)
+void moveTimeByOneHour(Clock& timeClock, int& hour, Text& hourText, int& sickLevel, bool& alreadySick)
 {
     if (timeClock.getElapsedTime() > 1000) {
         ++hour;
         if (hour == 24) {
+            sickLevel--;
+            alreadySick = false;
             hour = 0;
         }
         std::string s = std::to_string(hour);
@@ -1663,33 +1700,94 @@ shuffleBegin:
     }
 }
 
-void addBonusForFood(std::array<Food, 2>& foods, Text& energyText, float& playerSpeed, Clock& increasedPlayerClockSpeed)
+void addBonusForFood(Food& food, Text& energyText, float& playerSpeed, Clock& increasedPlayerClockSpeed)
 {
-    if (foods[0] == Food::Apple || foods[0] == Food::Banana || foods[0] == Food::Grape) {
+    if (food == Food::Apple || food == Food::Banana || food == Food::Grape) {
         energyText.setText(renderer, robotoF, std::stoi(energyText.text) + 5);
     }
-    else if (foods[0] == Food::Carrot || foods[0] == Food::Pumpkin || foods[0] == Food::Potato) {
+    else if (food == Food::Carrot || food == Food::Pumpkin || food == Food::Potato) {
         playerSpeed = INIT_PLAYER_SPEED * 2;
         increasedPlayerClockSpeed.restart();
     }
 }
 
-void eat(SDL_FRect& inventorySlotR, SDL_FRect& inventorySlot2R, Text& energyText, float& playerSpeed, Clock& increasedPlayerSpeedClock, std::array<Food, 2>& foods, Text& hungerText)
+void UpdateSickFactor(Food food, std::vector<int>& foodSicknessScore, int& sickLevel, bool alreadySick) {
+    int index = static_cast<int>(food);
+    if (index < 0 || index >= foodSicknessScore.size()) {
+        return;
+    }
+    for (int i = 0; i < foodSicknessScore.size(); i++) {
+        if (i == index) {
+            foodSicknessScore[i] += 3;
+        }
+        else {
+            foodSicknessScore[i] == 0 ? 0 : foodSicknessScore[i]--;
+        }
+    }
+
+    if (!alreadySick) {
+        int possibility = rand() % MAX_SICKNESS_SCORE + 1;
+        int threshold = foodSicknessScore[index];
+
+        if (possibility < threshold) {
+            alreadySick = true;
+            sickLevel += (threshold - possibility) / 3 + 1;
+        }
+    }
+}
+
+
+Food eat(SDL_FRect& inventorySlotR, SDL_FRect& inventorySlot2R, Text& energyText, float& playerSpeed, Clock& increasedPlayerSpeedClock, std::array<Food, 2>& foods, Text& hungerText)
 {
+    Food eaten = Food::Empty;
     if (SDL_PointInFRect(&mousePos, &inventorySlotR)) {
         if (foods[0] != Food::Empty) {
-            addBonusForFood(foods, energyText, playerSpeed, increasedPlayerSpeedClock);
+            addBonusForFood(foods[0], energyText, playerSpeed, increasedPlayerSpeedClock);
+            eaten = foods[0];
             foods[0] = Food::Empty;
             hungerText.setText(renderer, robotoF, std::stoi(hungerText.text) + 50 > 100 ? 100 : std::stoi(hungerText.text) + 50);
         }
     }
     if (SDL_PointInFRect(&mousePos, &inventorySlot2R)) {
         if (foods[1] != Food::Empty) {
-            addBonusForFood(foods, energyText, playerSpeed, increasedPlayerSpeedClock);
+            addBonusForFood(foods[1], energyText, playerSpeed, increasedPlayerSpeedClock);
+            eaten = foods[1];
             foods[1] = Food::Empty;
             hungerText.setText(renderer, robotoF, std::stoi(hungerText.text) + 50 > 100 ? 100 : std::stoi(hungerText.text) + 50);
         }
     }
+
+    return eaten;
+}
+
+Food eat(std::vector<StorageUI>& storage, Text& energyText, float& playerSpeed, Clock& increasedPlayerSpeedClock, std::vector<SDL_FRect>& inventory, std::array<Food, 2>& foods, Text& hungerText) 
+{
+    for (auto& storageItem : storage) {
+        if (SDL_PointInFRect(&mousePos, &storageItem.container)) {
+            if (storageItem.amount > 0) {
+                addBonusForFood(storageItem.foodType, energyText, playerSpeed, increasedPlayerSpeedClock);
+                storageItem.amount--;
+                hungerText.setText(renderer, robotoF, std::stoi(hungerText.text) + 50 > 100 ? 100 : std::stoi(hungerText.text) + 50);
+
+                return storageItem.foodType;
+            }
+        }
+    }
+
+    for (int i = 0; i < inventory.size(); i++) {
+        if (SDL_PointInFRect(&mousePos, &inventory[i])) {
+            if (foods[i] != Food::Empty) {
+                Food eaten = foods[i];
+                addBonusForFood(foods[i], energyText, playerSpeed, increasedPlayerSpeedClock);
+                foods[i] = Food::Empty;
+                hungerText.setText(renderer, robotoF, std::stoi(hungerText.text) + 50 > 100 ? 100 : std::stoi(hungerText.text) + 50);
+
+                return eaten;
+            }
+        }
+    }
+
+    return Food::Empty;
 }
 
 int main(int argc, char* argv[])
@@ -1819,6 +1917,7 @@ gameBegin:
     SDL_FRect inventorySlotXR{};
     SDL_FRect inventorySlotX2R{};
     std::array<Food, 2> foods;
+    std::array<bool, 2> foodSelected;
     Interactable doorI{};
     Interactable shopI{};
     Interactable bedI{};
@@ -1854,6 +1953,7 @@ gameBegin:
     SDL_FRect storageContainer{};
     Text storageTitleText;
     Text storageHoverText;
+    Text storageHungerText;
     std::vector<StorageUI> storage;
     std::vector<SDL_FRect> storageInvenPlaceholder;
     float playerSpeed = INIT_PLAYER_SPEED;
@@ -1886,7 +1986,7 @@ gameBegin:
     };
     Text mainTitleText;
     SDL_FRect mainContainer;
-    bool pauseKeyPressed = false;
+    bool pauseKeyHeld = false;
     Text creditsTitleText;
     Text authorsText;
     std::vector<Text> authors;
@@ -1899,6 +1999,10 @@ gameBegin:
     xBtnR.h = 32;
     xBtnR.x = 15;
     xBtnR.y = 15;
+    std::vector<int> foodSicknessScore(static_cast<int>(Food::NumFood), 0);
+    int sickLevel = 0;
+    bool alreadySick = false;
+    bool newDay = true;
 
     soundBtnR.w = 48;
     soundBtnR.h = 48;
@@ -2047,12 +2151,15 @@ gameBegin:
     playAgainText.dstR.y = gameOverText.dstR.y + gameOverText.dstR.h;
     loadMap("res/map.tmx", mapWidth, mapHeight, tiles, plots, houseR);
     HomeInit(tile, homeGround, homeWall, homeSeparator, windowR, doorI, shopI, player, bedI, chestI, actionText);
-    StorageInit(storageContainer, storageHoverText, storageTitleText, storage, storageInvenPlaceholder);
+    StorageInit(storageContainer, storageHoverText, storageTitleText, storageHungerText, storage, storageInvenPlaceholder);
     MenuInit(pauseContainer, pauseTitleText, "Paused", pauseOptions, PAUSE_NUM_OPTIONS, PAUSE_MENU_BUTTON_PADDING, pauseLabels, pauseMenuTypes);
     MenuInit(mainContainer, mainTitleText, "Autumn Survival", mainOptions, MAINMENU_NUM_OPTIONS, MAINMENU_BUTTON_PADDING, mainLabels, mainMenuTypes);
     CreditsInit(creditsTitleText, authorsText, authors, externalGraphicsText, egAuthorsTexts, backButton, backRect);
     for (auto& food : foods) {
         food = Food::Empty;
+    }
+    for (auto& item : foodSelected) {
+        item = false;
     }
     leafClock.restart();
     globalClock.restart();
@@ -2141,9 +2248,9 @@ gameBegin:
                 }
                 if (event.type == SDL_KEYDOWN) {
                     if (event.key.keysym.scancode == SDL_SCANCODE_ESCAPE) {
-                        if (!pauseKeyPressed) {
+                        if (!pauseKeyHeld) {
                             pausedState = state;
-                            pauseKeyPressed = true;
+                            pauseKeyHeld = true;
                             state = State::Paused;
                         }
                     }
@@ -2153,8 +2260,8 @@ gameBegin:
                 }
                 if (event.type == SDL_KEYUP) {
                     if (event.key.keysym.scancode == SDL_SCANCODE_ESCAPE) {
-                        if (pauseKeyPressed) {
-                            pauseKeyPressed = false;
+                        if (pauseKeyHeld) {
+                            pauseKeyHeld = false;
                         }
                     }
                     else {
@@ -2209,9 +2316,9 @@ gameBegin:
                 }
                 if (event.type == SDL_KEYDOWN) {
                     if (event.key.keysym.scancode == SDL_SCANCODE_ESCAPE) {
-                        if (!pauseKeyPressed) {
+                        if (!pauseKeyHeld) {
                             pausedState = state;
-                            pauseKeyPressed = true;
+                            pauseKeyHeld = true;
                             state = State::Paused;
                         }
                     }
@@ -2262,8 +2369,8 @@ gameBegin:
                 }
                 if (event.type == SDL_KEYUP) {
                     if (event.key.keysym.scancode == SDL_SCANCODE_ESCAPE) {
-                        if (pauseKeyPressed) {
-                            pauseKeyPressed = false;
+                        if (pauseKeyHeld) {
+                            pauseKeyHeld = false;
                         }
                     }
                     else {
@@ -2288,7 +2395,8 @@ gameBegin:
                         foods[1] = Food::Empty;
                     }
                     if (event.button.button == SDL_BUTTON_RIGHT) {
-                        eat(inventorySlotR, inventorySlot2R, energyText, playerSpeed, increasedPlayerSpeedClock, foods, hungerText);
+                        Food eaten = eat(inventorySlotR, inventorySlot2R, energyText, playerSpeed, increasedPlayerSpeedClock, foods, hungerText);
+                        UpdateSickFactor(eaten, foodSicknessScore, sickLevel, alreadySick);
                     }
                 }
                 if (event.type == SDL_MOUSEBUTTONUP) {
@@ -2319,7 +2427,7 @@ gameBegin:
                 rotClock.restart();
             }
             shouldShowRotImage = rotClock.getElapsedTime() + 1000 > rotDelayInMs && std::stoi(scoreText.text) > 0;
-            moveTimeByOneHour(timeClock, hour, hourText);
+            moveTimeByOneHour(timeClock, hour, hourText, sickLevel, alreadySick);
             if (tradeClock.getElapsedTime() > 1000) // TODO: Set it to 20000
             {
                 tradeRects.push_back(SDL_FRect());
@@ -2396,6 +2504,9 @@ gameBegin:
                 if (energyClock.getElapsedTime() > 1000) {
                     if (std::stoi(energyText.text) != 0) {
                         energyText.setText(renderer, robotoF, std::stoi(energyText.text) - 1);
+                        if (sickLevel != 0) {
+                            energyText.setText(renderer, robotoF, std::stoi(energyText.text) - static_cast<int>(sickLevel * ENERGY_SICK_FACTOR));
+                        }
                     }
                     if (energyText.text == "0") {
                         shouldGoHome = true;
@@ -2405,9 +2516,11 @@ gameBegin:
             }
             player.r.x += player.dx * deltaTime * playerSpeed;
             player.r.y += player.dy * deltaTime * playerSpeed;
-            if (SDL_HasIntersectionF(&houseR, &player.r)) {
+            if (SDL_HasIntersectionF(&houseR, &player.r) && keys[SDL_SCANCODE_SPACE]) {
                 if (!exitedHome) {
                     exitedHome = true;
+                    player.r.x = doorI.dstR.x + doorI.dstR.w / 2.0f - player.r.w / 2.0f;
+                    player.r.y = doorI.dstR.y + doorI.dstR.h / 2.0f - player.r.h / 2.0f;
                     state = State::Home;
                     Mix_PlayChannel(-1, doorS, 0);
                 }
@@ -2516,9 +2629,9 @@ gameBegin:
                 }
                 if (event.type == SDL_KEYDOWN) {
                     if (event.key.keysym.scancode == SDL_SCANCODE_ESCAPE) {
-                        if (!pauseKeyPressed) {
+                        if (!pauseKeyHeld) {
                             pausedState = state;
-                            pauseKeyPressed = true;
+                            pauseKeyHeld = true;
                             state = State::Paused;
                         }
                     }
@@ -2528,8 +2641,8 @@ gameBegin:
                 }
                 if (event.type == SDL_KEYUP) {
                     if (event.key.keysym.scancode == SDL_SCANCODE_ESCAPE) {
-                        if (pauseKeyPressed) {
-                            pauseKeyPressed = false;
+                        if (pauseKeyHeld) {
+                            pauseKeyHeld = false;
                         }
                     }
                     else {
@@ -2593,9 +2706,9 @@ gameBegin:
                 }
                 if (event.type == SDL_KEYDOWN) {
                     if (event.key.keysym.scancode == SDL_SCANCODE_ESCAPE) {
-                        if (!pauseKeyPressed) {
+                        if (!pauseKeyHeld) {
                             pausedState = state;
-                            pauseKeyPressed = true;
+                            pauseKeyHeld = true;
                             state = State::Paused;
                         }
                     }
@@ -2631,6 +2744,10 @@ gameBegin:
                                 if (hour >= 0 && hour < 7 || hour > 17) {
                                     shouldShowWhenCanSleepAndGoShop = false;
                                     hour = 7;
+                                    alreadySick = false;
+                                    if (sickLevel > 0) {
+                                        sickLevel--;
+                                    }
                                     hourText.setText(renderer, robotoF, std::to_string(hour) + "am");
                                     energyText.setText(renderer, robotoF, maxEnergy > std::stoi(energyText.text) ? maxEnergy : std::stoi(energyText.text));
                                     shouldGoHome = false;
@@ -2665,8 +2782,8 @@ gameBegin:
                 }
                 if (event.type == SDL_KEYUP) {
                     if (event.key.keysym.scancode == SDL_SCANCODE_ESCAPE) {
-                        if (pauseKeyPressed) {
-                            pauseKeyPressed = false;
+                        if (pauseKeyHeld) {
+                            pauseKeyHeld = false;
                         }
                     }
                     else {
@@ -2686,7 +2803,8 @@ gameBegin:
                         }
                     }
                     if (event.button.button == SDL_BUTTON_RIGHT) {
-                        eat(inventorySlotR, inventorySlot2R, energyText, playerSpeed, increasedPlayerSpeedClock, foods, hungerText);
+                        Food eaten = eat(inventorySlotR, inventorySlot2R, energyText, playerSpeed, increasedPlayerSpeedClock, foods, hungerText);
+                        UpdateSickFactor(eaten, foodSicknessScore, sickLevel, alreadySick);
                     }
                 }
                 if (event.type == SDL_MOUSEBUTTONUP) {
@@ -2759,10 +2877,13 @@ gameBegin:
                 }
             }
 #endif
-            moveTimeByOneHour(timeClock, hour, hourText);
+            moveTimeByOneHour(timeClock, hour, hourText, sickLevel, alreadySick);
             if (hungerClock.getElapsedTime() > HUNGER_DECREASE_DELAY_IN_MS) {
                 if (std::stoi(hungerText.text) > 0) {
                     hungerText.setText(renderer, robotoF, std::stoi(hungerText.text) - 1);
+                    if (sickLevel != 0) {
+                        hungerText.setText(renderer, robotoF, std::stoi(hungerText.text) - static_cast<int>(sickLevel * HUNGER_SICK_FACTOR));
+                    }
                     if (std::stoi(hungerText.text) <= 0) {
                         state = State::Gameover;
                     }
@@ -2792,9 +2913,9 @@ gameBegin:
                 }
                 if (event.type == SDL_KEYDOWN) {
                     if (event.key.keysym.scancode == SDL_SCANCODE_ESCAPE) {
-                        if (!pauseKeyPressed) {
+                        if (!pauseKeyHeld) {
                             pausedState = state;
-                            pauseKeyPressed = true;
+                            pauseKeyHeld = true;
                             state = State::Paused;
                         }
                     }
@@ -2804,8 +2925,8 @@ gameBegin:
                 }
                 if (event.type == SDL_KEYUP) {
                     if (event.key.keysym.scancode == SDL_SCANCODE_ESCAPE) {
-                        if (pauseKeyPressed) {
-                            pauseKeyPressed = false;
+                        if (pauseKeyHeld) {
+                            pauseKeyHeld = false;
                         }
                     }
                     else {
@@ -2928,9 +3049,9 @@ gameBegin:
                 }
                 if (event.type == SDL_KEYDOWN) {
                     if (event.key.keysym.scancode == SDL_SCANCODE_ESCAPE) {
-                        if (!pauseKeyPressed) {
+                        if (!pauseKeyHeld) {
                             pausedState = state;
-                            pauseKeyPressed = true;
+                            pauseKeyHeld = true;
                             state = State::Paused;
                         }
                     }
@@ -2940,8 +3061,8 @@ gameBegin:
                 }
                 if (event.type == SDL_KEYUP) {
                     if (event.key.keysym.scancode == SDL_SCANCODE_ESCAPE) {
-                        if (pauseKeyPressed) {
-                            pauseKeyPressed = false;
+                        if (pauseKeyHeld) {
+                            pauseKeyHeld = false;
                         }
                     }
                     else {
@@ -2981,6 +3102,10 @@ gameBegin:
                             }
                         }
                     }
+                    else if (event.button.button == SDL_BUTTON_RIGHT) {
+                        Food eaten = eat(storage, energyText, playerSpeed, increasedPlayerSpeedClock, storageInvenPlaceholder, foods, hungerText);
+                        UpdateSickFactor(eaten, foodSicknessScore, sickLevel, alreadySick);
+                    }
                 }
                 if (event.type == SDL_MOUSEBUTTONUP) {
                     buttons[event.button.button] = false;
@@ -2992,11 +3117,31 @@ gameBegin:
                     mousePos.y = event.motion.y / scaleY;
                     realMousePos.x = event.motion.x;
                     realMousePos.y = event.motion.y;
+
+                    for (auto& item : storage) {
+                        if (SDL_PointInFRect(&mousePos, &item.container)) {
+                            item.selected = true;
+                        }
+                        else if (item.selected) {
+                            item.selected = false;
+                        }
+                    }
+
+                    for (int i = 0; i < storageInvenPlaceholder.size(); i++) {
+                        if (foods[i] != Food::Empty) {
+                            if (SDL_PointInFRect(&mousePos, &storageInvenPlaceholder[i])) {
+                                foodSelected[i] = true;
+                            }
+                            else if (foodSelected[i]) {
+                                foodSelected[i] = false;
+                            }
+                        }
+                    }
                 }
             }
             SDL_SetRenderDrawColor(renderer, 82, 71, 55, 0);
             SDL_RenderClear(renderer);
-            RenderStorage(storageContainer, storageHoverText, storageTitleText, storage, storageInvenPlaceholder, foods);
+            RenderStorage(storageContainer, storageHoverText, storageTitleText, storageHungerText, hungerText.text, storage, storageInvenPlaceholder, foods, foodSelected);
             SDL_RenderCopyF(renderer, xT, 0, &xBtnR);
             SDL_RenderPresent(renderer);
         }
@@ -3011,14 +3156,14 @@ gameBegin:
                 SDL_RenderSetScale(renderer, event.window.data1 / (float)windowWidth, event.window.data2 / (float)windowHeight);
             }
             if (event.type == SDL_KEYDOWN && event.key.keysym.scancode == SDL_SCANCODE_ESCAPE) {
-                if (!pauseKeyPressed) {
-                    pauseKeyPressed = true;
+                if (!pauseKeyHeld) {
+                    pauseKeyHeld = true;
                     state = pausedState;
                 }
             }
             if (event.type == SDL_KEYUP && event.key.keysym.scancode == SDL_SCANCODE_ESCAPE) {
-                if (pauseKeyPressed) {
-                    pauseKeyPressed = false;
+                if (pauseKeyHeld) {
+                    pauseKeyHeld = false;
                 }
             }
             if (event.type == SDL_MOUSEBUTTONDOWN) {
@@ -3095,7 +3240,6 @@ gameBegin:
         RenderCredits(creditsTitleText, authorsText, authors, externalGraphicsText, egAuthorsTexts, backButton, backRect);
         SDL_RenderPresent(renderer);
         }
-
         saveData(scoreText, rotDelayInMs, isMuted, maxEnergy);
     }
     // TODO: On mobile remember to use eventWatch function (it doesn't reach this code when terminating)

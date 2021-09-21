@@ -1080,14 +1080,16 @@ void RenderUI(Text scoreText,
     hungerR.y = hungerText.dstR.y + hungerText.dstR.h / 2 - hungerR.h / 2;
     SDL_RenderCopyF(renderer, hungerT, 0, &hungerR);
 
-    sickText.setText(renderer, robotoF, "x" + std::to_string(sickLevel));
-    sickText.draw(renderer);
-    SDL_FRect sickR;
-    sickR.w = 32;
-    sickR.h = 32;
-    sickR.x = sickText.dstR.x - sickR.w;
-    sickR.y = sickText.dstR.y + sickText.dstR.h / 2.0f - sickR.h / 2.0f;
-    SDL_RenderCopyF(renderer, sickT, 0, &sickR);
+    if (sickLevel > 0) {
+        sickText.setText(renderer, robotoF, "x" + std::to_string(sickLevel));
+        sickText.draw(renderer);
+        SDL_FRect sickR;
+        sickR.w = 32;
+        sickR.h = 32;
+        sickR.x = sickText.dstR.x - sickR.w;
+        sickR.y = sickText.dstR.y + sickText.dstR.h / 2.0f - sickR.h / 2.0f;
+        SDL_RenderCopyF(renderer, sickT, 0, &sickR);
+    }
 }
 
 int ClosestNumber(int total, int size)
@@ -1101,6 +1103,21 @@ int ClosestNumber(int total, int size)
     }
 
     return nextClosest;
+}
+
+void RenderInstructions(Text& controlsText, std::string controlsWords, Text& keyControlsText, std::string keyControlsWords) {
+    controlsText.setText(renderer, robotoF, controlsWords);
+    controlsText.dstR.w = controlsText.text.length() * LETTER_WIDTH;
+    keyControlsText.setText(renderer, robotoF, keyControlsWords, { 255, 0, 0 });
+    keyControlsText.dstR.w = keyControlsText.text.length() * LETTER_WIDTH;
+    keyControlsText.dstR.x = windowWidth / 2.0f - (controlsText.dstR.w + keyControlsText.dstR.w) / 2.0f;
+    controlsText.dstR.x = keyControlsText.dstR.x + keyControlsText.dstR.w;
+
+    controlsText.draw(renderer);
+    keyControlsText.draw(renderer);
+
+    controlsText.dstR.y -= controlsText.dstR.h;
+    keyControlsText.dstR.y = controlsText.dstR.y;
 }
 
 void HomeInit(SDL_FRect& tile,
@@ -1199,7 +1216,9 @@ void RenderHome(SDL_FRect homeGround,
     SDL_FRect inventorySlot2R,
     std::array<Food, 2> foods,
     SDL_FRect inventorySlotXR,
-    SDL_FRect inventorySlotX2R)
+    SDL_FRect inventorySlotX2R,
+    Text& controlsText,
+    Text& keyControlsText)
 {
     // Create home map
     SDL_SetRenderDrawColor(renderer, 209, 180, 140, SDL_ALPHA_OPAQUE);
@@ -1264,10 +1283,9 @@ void RenderHome(SDL_FRect homeGround,
     SDL_RenderCopyF(renderer, shopT, 0, &shopI.dstR);
     SDL_RenderCopyF(renderer, chestT, 0, &chestI.dstR);
 
-    actionText.setText(renderer, robotoF, currentAction.actionText);
-    actionText.dstR.w = currentAction.textLength;
-    actionText.dstR.x = windowWidth / 2.0f - actionText.dstR.w / 2.0f;
-    actionText.draw(renderer);
+    if (currentAction.actionText != "") {
+        RenderInstructions(controlsText, currentAction.actionText, keyControlsText, "SPACE: ");
+    }
 
     RenderUI(scoreText, isMuted, soundBtnR, hourText, energyText, hour, sunR, energyR, playerDirection, playerAnimationFrames, playerAnimationFrame, player, isMoving, playerAnimationClock, hungerText, sickText, sickLevel, inventorySlotR, inventorySlot2R, foods, inventorySlotXR, inventorySlotX2R);
     if (shouldShowInfoText) {
@@ -2022,6 +2040,8 @@ gameBegin:
     int sickLevel = 0;
     bool alreadySick = false;
     Text sickText;
+    Text controlsText;
+    Text keyControlsText;
 
     soundBtnR.w = 48;
     soundBtnR.h = 48;
@@ -2173,6 +2193,9 @@ gameBegin:
     playAgainText.dstR.h = 40;
     playAgainText.dstR.x = windowWidth / 2 - playAgainText.dstR.w / 2;
     playAgainText.dstR.y = gameOverText.dstR.y + gameOverText.dstR.h;
+    controlsText.dstR.h = 50;
+    controlsText.dstR.y = windowHeight - controlsText.dstR.h;
+    keyControlsText.dstR = controlsText.dstR;
     loadMap("res/map.tmx", mapWidth, mapHeight, tiles, plots, houseR);
     HomeInit(tile, homeGround, homeWall, homeSeparator, windowR, doorI, shopI, player, bedI, chestI, actionText);
     StorageInit(storageContainer, storageHoverText, storageTitleText, storageHungerText, storage, storageInvenPlaceholder);
@@ -2603,8 +2626,23 @@ gameBegin:
             }
             SDL_RenderCopyF(renderer, houseT, 0, &houseR);
             if (isCollecting) {
-                SDL_RenderCopyF(renderer, collectT, 0, &collectR);
+                //SDL_RenderCopyF(renderer, collectT, 0, &collectR);
+                RenderInstructions(controlsText, "Collect", keyControlsText, "SPACE: ");
             }
+            if (SDL_HasIntersectionF(&houseR, &player.r)) {
+                RenderInstructions(controlsText, "Enter", keyControlsText, "SPACE: ");
+            }
+            if (SDL_PointInFRect(&mousePos, &inventorySlotXR) || SDL_PointInFRect(&mousePos, &inventorySlotX2R)) {
+                RenderInstructions(controlsText, "Delete", keyControlsText, "LEFT-CLICK: ");
+            }
+            if (SDL_PointInFRect(&mousePos, &inventorySlotR) && foods[0] != Food::Empty) {
+                RenderInstructions(controlsText, "Eat", keyControlsText, "RIGHT-CLICK: ");
+            }
+            if (SDL_PointInFRect(&mousePos, &inventorySlot2R) && foods[1] != Food::Empty) {
+                RenderInstructions(controlsText, "Eat", keyControlsText, "RIGHT-CLICK: ");
+            }
+            
+
             SDL_SetRenderTarget(renderer, 0);
 
             SDL_SetRenderTarget(renderer, lightLayerT);
@@ -2922,7 +2960,7 @@ gameBegin:
             RenderHome(homeGround, tile, homeWall, homeSeparator, hour, windowR, bedI, doorI, shopI, chestI,
                 actionText, currentAction, shouldShowInfoTextAboutNotEnoughEnergy, infoTextAboutNotEnoughEnergy, shouldShowWhenCanSleepAndGoShop, canSleepAndGoShopText, scoreText, isMuted,
                 soundBtnR, hourText, energyText, sunR, energyR, playerDirection, playerAnimationFrames, playerAnimationFrame, player, isMoving,
-                playerAnimationClock, hungerText, sickText, sickLevel, inventorySlotR, inventorySlot2R, foods, inventorySlotXR, inventorySlotX2R);
+                playerAnimationClock, hungerText, sickText, sickLevel, inventorySlotR, inventorySlot2R, foods, inventorySlotXR, inventorySlotX2R, controlsText, keyControlsText);
             SDL_RenderPresent(renderer);
         }
         else if (state == State::Minigame) {
@@ -3166,6 +3204,23 @@ gameBegin:
             SDL_SetRenderDrawColor(renderer, 82, 71, 55, 0);
             SDL_RenderClear(renderer);
             RenderStorage(storageContainer, storageHoverText, storageTitleText, storageHungerText, hungerText.text, storage, storageInvenPlaceholder, foods, foodSelected);
+            for (auto& item : storage) {
+                if (item.selected && item.amount != 0) {
+                    RenderInstructions(controlsText, "Take", keyControlsText, "LEFT-CLICK: ");
+                    RenderInstructions(controlsText, "Eat", keyControlsText, "RIGHT-CLICK: ");
+                    break;
+                }
+            }
+
+            for (int i = 0; i < storageInvenPlaceholder.size(); i++) {
+                if (foods[i] != Food::Empty) {
+                    if (foodSelected[i]) {
+                        RenderInstructions(controlsText, "Store", keyControlsText, "LEFT-CLICK: ");
+                        RenderInstructions(controlsText, "Eat", keyControlsText, "RIGHT-CLICK: ");
+                        break;
+                    }
+                }
+            }
             SDL_RenderCopyF(renderer, xT, 0, &xBtnR);
             SDL_RenderPresent(renderer);
         }
@@ -3264,6 +3319,9 @@ gameBegin:
         RenderCredits(creditsTitleText, authorsText, authors, externalGraphicsText, egAuthorsTexts, backButton, backRect);
         SDL_RenderPresent(renderer);
         }
+
+        controlsText.dstR.y = windowHeight - controlsText.dstR.h;
+        keyControlsText.dstR.y = controlsText.dstR.y;
         saveData(scoreText, rotDelayInMs, isMuted, maxEnergy);
     }
     // TODO: On mobile remember to use eventWatch function (it doesn't reach this code when terminating)

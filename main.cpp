@@ -87,8 +87,8 @@ using namespace std::chrono_literals;
         209, 180, 140, 255 \
     }
 #define BUTTON_HIGHLIGHTED \
-    {                          \
-        212, 110, 51, 255     \
+    {                      \
+        212, 110, 51, 255  \
     }
 #define LETTER_WIDTH 25
 #define PAUSE_NUM_OPTIONS 3
@@ -812,7 +812,7 @@ struct StorageUI {
 
     void draw(SDL_Renderer* renderer)
     {
-        
+
         if (selected) {
             SDL_SetRenderDrawColor(renderer, 212, 110, 51, SDL_ALPHA_OPAQUE);
             SDL_RenderFillRectF(renderer, &container);
@@ -1116,7 +1116,8 @@ int ClosestNumber(int total, int size)
     return nextClosest;
 }
 
-void RenderInstructions(Text& controlsText, std::string controlsWords, Text& keyControlsText, std::string keyControlsWords) {
+void RenderInstructions(Text& controlsText, std::string controlsWords, Text& keyControlsText, std::string keyControlsWords)
+{
     controlsText.setText(renderer, robotoF, controlsWords);
     controlsText.dstR.w = controlsText.text.length() * LETTER_WIDTH;
     keyControlsText.setText(renderer, robotoF, keyControlsWords, { 255, 0, 0 });
@@ -1509,7 +1510,7 @@ void CreditsInit(Text& titleText,
     egAuthorsTexts.push_back(egAuthorsTexts.back());
     egAuthorsTexts.back().setText(renderer, robotoF, "Icongeek26");
     egAuthorsTexts.push_back(egAuthorsTexts.back());
-    egAuthorsTexts.back().setText(renderer, robotoF, "Joseph Kosma - Music"); 
+    egAuthorsTexts.back().setText(renderer, robotoF, "Joseph Kosma - Music");
     egAuthorsTexts.push_back(egAuthorsTexts.back());
     egAuthorsTexts.back().setText(renderer, robotoF, "marcelofg55");
     egAuthorsTexts.push_back(egAuthorsTexts.back());
@@ -1758,7 +1759,8 @@ void addBonusForFood(Food& food, Text& energyText, float& playerSpeed, Clock& in
     }
 }
 
-void UpdateSickFactor(Food food, std::vector<int>& foodSicknessScore, int& sickLevel, bool alreadySick) {
+void UpdateSickFactor(Food food, std::vector<int>& foodSicknessScore, int& sickLevel, bool alreadySick)
+{
     int index = static_cast<int>(food);
     if (index < 0 || index >= foodSicknessScore.size()) {
         return;
@@ -1783,7 +1785,6 @@ void UpdateSickFactor(Food food, std::vector<int>& foodSicknessScore, int& sickL
     }
 }
 
-
 Food eat(SDL_FRect& inventorySlotR, SDL_FRect& inventorySlot2R, Text& energyText, float& playerSpeed, Clock& increasedPlayerSpeedClock, std::array<Food, 2>& foods, Text& hungerText)
 {
     Food eaten = Food::Empty;
@@ -1807,7 +1808,7 @@ Food eat(SDL_FRect& inventorySlotR, SDL_FRect& inventorySlot2R, Text& energyText
     return eaten;
 }
 
-Food eat(std::vector<StorageUI>& storage, Text& energyText, float& playerSpeed, Clock& increasedPlayerSpeedClock, std::vector<SDL_FRect>& inventory, std::array<Food, 2>& foods, Text& hungerText) 
+Food eat(std::vector<StorageUI>& storage, Text& energyText, float& playerSpeed, Clock& increasedPlayerSpeedClock, std::vector<SDL_FRect>& inventory, std::array<Food, 2>& foods, Text& hungerText)
 {
     for (auto& storageItem : storage) {
         if (SDL_PointInFRect(&mousePos, &storageItem.container)) {
@@ -2626,17 +2627,25 @@ gameBegin:
             player.dx = 0;
             player.dy = 0;
             if (shouldGoHome) {
+                bool nothing = true;
                 if (player.r.x + player.r.w < houseR.x) {
                     player.r.x += playerSpeed * deltaTime;
+                    nothing = false;
                 }
                 else if (player.r.x > houseR.x + houseR.w) {
                     player.r.x += -playerSpeed * deltaTime;
+                    nothing = false;
                 }
                 if (player.r.y + player.r.h < houseR.y) {
                     player.r.y += playerSpeed * deltaTime;
+                    nothing = false;
                 }
                 else if (player.r.y > houseR.y + houseR.h) {
                     player.r.y += -playerSpeed * deltaTime;
+                    nothing = false;
+                }
+                if (nothing) {
+                    state = State::Home;
                 }
             }
             else {
@@ -2773,7 +2782,6 @@ gameBegin:
             if (SDL_PointInFRect(&mousePos, &inventorySlot2R) && foods[1] != Food::Empty) {
                 RenderInstructions(controlsText, "Eat", keyControlsText, "RIGHT-CLICK: ");
             }
-            
 
             SDL_SetRenderTarget(renderer, 0);
 
@@ -3558,44 +3566,44 @@ gameBegin:
             SDL_RenderPresent(renderer);
         }
         else if (state == State::Paused) {
-        SDL_Event event;
-        while (SDL_PollEvent(&event)) {
-            if (event.type == SDL_QUIT) {
-                running = false;
-                // TODO: On mobile remember to use eventWatch function (it doesn't reach this code when terminating)
-            }
-            if (event.type == SDL_WINDOWEVENT && event.window.event == SDL_WINDOWEVENT_RESIZED) {
-                SDL_RenderSetScale(renderer, event.window.data1 / (float)windowWidth, event.window.data2 / (float)windowHeight);
-            }
-            if (event.type == SDL_KEYDOWN && event.key.keysym.scancode == SDL_SCANCODE_ESCAPE) {
-                if (!pauseKeyHeld) {
-                    pauseKeyHeld = true;
-                    state = pausedState;
+            SDL_Event event;
+            while (SDL_PollEvent(&event)) {
+                if (event.type == SDL_QUIT) {
+                    running = false;
+                    // TODO: On mobile remember to use eventWatch function (it doesn't reach this code when terminating)
                 }
-            }
-            if (event.type == SDL_KEYUP && event.key.keysym.scancode == SDL_SCANCODE_ESCAPE) {
-                if (pauseKeyHeld) {
-                    pauseKeyHeld = false;
+                if (event.type == SDL_WINDOWEVENT && event.window.event == SDL_WINDOWEVENT_RESIZED) {
+                    SDL_RenderSetScale(renderer, event.window.data1 / (float)windowWidth, event.window.data2 / (float)windowHeight);
                 }
-            }
-            if (event.type == SDL_MOUSEBUTTONDOWN) {
-                buttons[event.button.button] = true;
-                for (int i = 0; i < PAUSE_NUM_OPTIONS; ++i) {
-                    if (SDL_PointInFRect(&mousePos, &pauseOptions[i].buttonText.dstR)) {
-                        HandleMenuOption(pauseOptions[i].menuType, state, pausedState, intro, running);
+                if (event.type == SDL_KEYDOWN && event.key.keysym.scancode == SDL_SCANCODE_ESCAPE) {
+                    if (!pauseKeyHeld) {
+                        pauseKeyHeld = true;
+                        state = pausedState;
                     }
                 }
-            }
-            if (event.type == SDL_MOUSEBUTTONUP) {
-                buttons[event.button.button] = false;
-            }
-            if (event.type == SDL_MOUSEMOTION) {
-                float scaleX, scaleY;
-                SDL_RenderGetScale(renderer, &scaleX, &scaleY);
-                mousePos.x = event.motion.x / scaleX;
-                mousePos.y = event.motion.y / scaleY;
-                realMousePos.x = event.motion.x;
-                realMousePos.y = event.motion.y;
+                if (event.type == SDL_KEYUP && event.key.keysym.scancode == SDL_SCANCODE_ESCAPE) {
+                    if (pauseKeyHeld) {
+                        pauseKeyHeld = false;
+                    }
+                }
+                if (event.type == SDL_MOUSEBUTTONDOWN) {
+                    buttons[event.button.button] = true;
+                    for (int i = 0; i < PAUSE_NUM_OPTIONS; ++i) {
+                        if (SDL_PointInFRect(&mousePos, &pauseOptions[i].buttonText.dstR)) {
+                            HandleMenuOption(pauseOptions[i].menuType, state, pausedState, intro, running);
+                        }
+                    }
+                }
+                if (event.type == SDL_MOUSEBUTTONUP) {
+                    buttons[event.button.button] = false;
+                }
+                if (event.type == SDL_MOUSEMOTION) {
+                    float scaleX, scaleY;
+                    SDL_RenderGetScale(renderer, &scaleX, &scaleY);
+                    mousePos.x = event.motion.x / scaleX;
+                    mousePos.y = event.motion.y / scaleY;
+                    realMousePos.x = event.motion.x;
+                    realMousePos.y = event.motion.y;
 
                     for (int i = 0; i < PAUSE_NUM_OPTIONS; ++i) {
                         if (SDL_PointInFRect(&mousePos, &pauseOptions[i].buttonText.dstR)) {

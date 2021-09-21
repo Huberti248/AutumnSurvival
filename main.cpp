@@ -163,6 +163,8 @@ SDL_Texture* carrotSoilT;
 SDL_Texture* potatoSoilT;
 SDL_Texture* sickT;
 SDL_Texture* sellT;
+SDL_Texture* circleT;
+SDL_Texture* redCircleT;
 Mix_Music* josephKosmaM;
 Mix_Music* antonioVivaldiM;
 Mix_Chunk* doorS;
@@ -1981,6 +1983,190 @@ Food eat(std::vector<StorageUI>& storage, Text& energyText, float& playerSpeed, 
     return Food::Empty;
 }
 
+void onSpaceInOutsideState(int& hour, bool& canCollect, std::array<Food, 2>& foods, State& state, std::vector<Plot>& plots, Player& player, std::vector<Part>& parts)
+{
+    if (hour >= 7 && hour <= 17) {
+        canCollect = true;
+        if (foods[0] == Food::Empty || foods[1] == Food::Empty) {
+            int index = foods[0] == Food::Empty ? 0 : 1;
+            for (auto& plot : plots) {
+                if (plot.isIntersecting(player.r)) {
+                    state = State::Minigame;
+                    if (plot.food == Food::Apple) {
+                        currentPartT = appleT;
+                    }
+                    else if (plot.food == Food::Banana) {
+                        currentPartT = bananaT;
+                    }
+                    else if (plot.food == Food::Carrot) {
+                        currentPartT = carrotT;
+                    }
+                    else if (plot.food == Food::Grape) {
+                        currentPartT = grapeT;
+                    }
+                    else if (plot.food == Food::Potato) {
+                        currentPartT = potatoT;
+                    }
+                    else if (plot.food == Food::Pumpkin) {
+                        currentPartT = pumpkinT;
+                    }
+                    for (int i = 0; i < 10; ++i) {
+                        parts.push_back(Part());
+                        parts.back().dstR.w = 32;
+                        parts.back().dstR.h = 32;
+                        parts.back().dstR.x = random(0, windowWidth - parts.back().dstR.w);
+                        parts.back().dstR.y = -parts.back().dstR.h;
+                    }
+                }
+            }
+        }
+    }
+    else {
+        canCollect = false;
+    }
+}
+
+void onSpaceInHomeState(Player& player, int& hour, State& state, bool& shouldShowWhenCanSleepAndGoShop,
+    std::array<Food, 2> foods, Shop& shop, std::vector<StorageUI>& storage, Interactable& doorI, bool& shouldGoHome,
+    bool& canCollect, bool& shouldShowInfoTextAboutNotEnoughEnergy, SDL_FRect& houseR, Interactable& shopI, Interactable& bedI,
+    bool& alreadySick, int& sickLevel, Text& hourText, Text& energyText, int& maxEnergy, Interactable& chestI)
+{
+    if (SDL_HasIntersectionF(&player.r, &shopI.dstR)) {
+        if (hour >= 0 && hour < 7 || hour > 17) {
+            state = State::Shop;
+            shouldShowWhenCanSleepAndGoShop = false;
+            Mix_PlayChannel(-1, doorS, 0);
+            /*
+                                        NOTE: Order in storage
+                                        0 Apple,
+                                        1 Carrot,
+                                        2 Grape,
+                                        3 Potato,
+                                        4 Pumpkin,
+                                        5 Banana,
+                                        Order in shop
+                                        0 banana
+                                        1 apple
+                                        2 grape
+                                        3 pumpkin 
+                                        4 potato
+                                        5 carrot
+                                    */
+            shop.sellItems[0].countText.setText(renderer, robotoF, "x" + std::to_string(storage[5].amount));
+            shop.sellItems[1].countText.setText(renderer, robotoF, "x" + std::to_string(storage[0].amount));
+            shop.sellItems[2].countText.setText(renderer, robotoF, "x" + std::to_string(storage[2].amount));
+            shop.sellItems[3].countText.setText(renderer, robotoF, "x" + std::to_string(storage[4].amount));
+            shop.sellItems[4].countText.setText(renderer, robotoF, "x" + std::to_string(storage[3].amount));
+            shop.sellItems[5].countText.setText(renderer, robotoF, "x" + std::to_string(storage[1].amount));
+            if (foods[0] == Food::Apple) {
+                if (foods[1] == Food::Apple) {
+                    shop.sellItems[1].countText.setText(renderer, robotoF, "x" + std::to_string(storage[0].amount + 2));
+                }
+                else {
+                    shop.sellItems[1].countText.setText(renderer, robotoF, "x" + std::to_string(storage[0].amount + 1));
+                }
+            }
+            else if (foods[0] == Food::Banana) {
+                if (foods[1] == Food::Banana) {
+                    shop.sellItems[0].countText.setText(renderer, robotoF, "x" + std::to_string(storage[5].amount + 2));
+                }
+                else {
+                    shop.sellItems[0].countText.setText(renderer, robotoF, "x" + std::to_string(storage[5].amount + 1));
+                }
+            }
+            else if (foods[0] == Food::Carrot) {
+                if (foods[1] == Food::Carrot) {
+                    shop.sellItems[5].countText.setText(renderer, robotoF, "x" + std::to_string(storage[1].amount + 2));
+                }
+                else {
+                    shop.sellItems[5].countText.setText(renderer, robotoF, "x" + std::to_string(storage[1].amount + 1));
+                }
+            }
+            else if (foods[0] == Food::Grape) {
+                if (foods[1] == Food::Grape) {
+                    shop.sellItems[2].countText.setText(renderer, robotoF, "x" + std::to_string(storage[2].amount + 2));
+                }
+                else {
+                    shop.sellItems[2].countText.setText(renderer, robotoF, "x" + std::to_string(storage[2].amount + 1));
+                }
+            }
+            else if (foods[0] == Food::Potato) {
+                if (foods[1] == Food::Potato) {
+                    shop.sellItems[4].countText.setText(renderer, robotoF, "x" + std::to_string(storage[3].amount + 2));
+                }
+                else {
+                    shop.sellItems[4].countText.setText(renderer, robotoF, "x" + std::to_string(storage[3].amount + 1));
+                }
+            }
+            else if (foods[0] == Food::Pumpkin) {
+                if (foods[1] == Food::Pumpkin) {
+                    shop.sellItems[3].countText.setText(renderer, robotoF, "x" + std::to_string(storage[4].amount + 2));
+                }
+                else {
+                    shop.sellItems[3].countText.setText(renderer, robotoF, "x" + std::to_string(storage[4].amount + 1));
+                }
+            }
+            if (foods[0] != foods[1]) {
+                if (foods[1] == Food::Apple) {
+                    shop.sellItems[1].countText.setText(renderer, robotoF, "x" + std::to_string(storage[0].amount + 1));
+                }
+                else if (foods[1] == Food::Banana) {
+                    shop.sellItems[0].countText.setText(renderer, robotoF, "x" + std::to_string(storage[5].amount + 1));
+                }
+                else if (foods[1] == Food::Carrot) {
+                    shop.sellItems[5].countText.setText(renderer, robotoF, "x" + std::to_string(storage[1].amount + 1));
+                }
+                else if (foods[1] == Food::Grape) {
+                    shop.sellItems[2].countText.setText(renderer, robotoF, "x" + std::to_string(storage[2].amount + 1));
+                }
+                else if (foods[1] == Food::Potato) {
+                    shop.sellItems[4].countText.setText(renderer, robotoF, "x" + std::to_string(storage[3].amount + 1));
+                }
+                else if (foods[1] == Food::Pumpkin) {
+                    shop.sellItems[3].countText.setText(renderer, robotoF, "x" + std::to_string(storage[4].amount + 1));
+                }
+            }
+        }
+        else {
+            shouldShowWhenCanSleepAndGoShop = true;
+        }
+    }
+    else if (SDL_HasIntersectionF(&player.r, &doorI.dstR)) {
+        if (!shouldGoHome) {
+            state = State::Outside;
+            player.r.x = houseR.x + houseR.w + 5;
+            player.r.y = houseR.y + houseR.h / 2 - player.r.h / 2;
+            canCollect = true;
+            shouldShowWhenCanSleepAndGoShop = false;
+            Mix_PlayChannel(-1, doorS, 0);
+        }
+        else {
+            shouldShowInfoTextAboutNotEnoughEnergy = true;
+        }
+    }
+    else if (SDL_HasIntersectionF(&player.r, &bedI.dstR)) {
+        if (hour >= 0 && hour < 7 || hour > 17) {
+            shouldShowWhenCanSleepAndGoShop = false;
+            hour = 7;
+            alreadySick = false;
+            if (sickLevel > 0) {
+                sickLevel--;
+            }
+            hourText.setText(renderer, robotoF, std::to_string(hour) + "am");
+            energyText.setText(renderer, robotoF, maxEnergy > std::stoi(energyText.text) ? maxEnergy : std::stoi(energyText.text));
+            shouldGoHome = false;
+            shouldShowInfoTextAboutNotEnoughEnergy = false;
+            Mix_PlayChannel(-1, sleepS, 0);
+        }
+        else {
+            shouldShowWhenCanSleepAndGoShop = true;
+        }
+    }
+    else if (SDL_HasIntersectionF(&player.r, &chestI.dstR)) {
+        state = State::Storage;
+    }
+}
+
 int main(int argc, char* argv[])
 {
     std::srand(std::time(0));
@@ -2047,6 +2233,8 @@ gameBegin:
     potatoSoilT = IMG_LoadTexture(renderer, "res/potatoSoil.png");
     sickT = IMG_LoadTexture(renderer, "res/sick.png");
     sellT = IMG_LoadTexture(renderer, "res/sell.png");
+    circleT = IMG_LoadTexture(renderer, "res/circle.png");
+    redCircleT = IMG_LoadTexture(renderer, "res/redCircle.png");
     josephKosmaM = Mix_LoadMUS("res/autumnLeavesJosephKosma.mp3");
     antonioVivaldiM = Mix_LoadMUS("res/jesienAntonioVivaldi.mp3");
     doorS = Mix_LoadWAV("res/door.wav");
@@ -2200,7 +2388,7 @@ gameBegin:
         state = State::Intro;
     }
     else {
-        state = State::Main;
+        state = State::Outside;
     }
     State pausedState = state;
     Clock rotClock;
@@ -2325,6 +2513,31 @@ gameBegin:
     Text sickText;
     Text controlsText;
     Text keyControlsText;
+    SDL_FRect leftR;
+    leftR.w = 64;
+    leftR.h = 64;
+    leftR.x = windowWidth - leftR.w * 4;
+    leftR.y = windowHeight - leftR.h - 45;
+    SDL_FRect rightR;
+    rightR.w = 64;
+    rightR.h = 64;
+    rightR.x = windowWidth - rightR.w * 2;
+    rightR.y = windowHeight - rightR.h - 45;
+    SDL_FRect upR;
+    upR.w = 64;
+    upR.h = 64;
+    upR.x = windowWidth - upR.w * 3;
+    upR.y = windowHeight - upR.h * 2 - 45;
+    SDL_FRect downR;
+    downR.w = 64;
+    downR.h = 64;
+    downR.x = windowWidth - downR.w * 3;
+    downR.y = windowHeight - downR.h - 45;
+    SDL_FRect actionR;
+    actionR.w = 64;
+    actionR.h = 64;
+    actionR.x = upR.x - actionR.w - 15;
+    actionR.y = upR.y - actionR.h - 15;
 
     soundBtnR.w = 48;
     soundBtnR.h = 48;
@@ -2658,45 +2871,7 @@ gameBegin:
                     else {
                         keys[event.key.keysym.scancode] = true;
                         if (event.key.keysym.scancode == SDL_SCANCODE_SPACE) {
-                            if (hour >= 7 && hour <= 17) {
-                                canCollect = true;
-                                if (foods[0] == Food::Empty || foods[1] == Food::Empty) {
-                                    int index = foods[0] == Food::Empty ? 0 : 1;
-                                    for (auto& plot : plots) {
-                                        if (plot.isIntersecting(player.r)) {
-                                            state = State::Minigame;
-                                            if (plot.food == Food::Apple) {
-                                                currentPartT = appleT;
-                                            }
-                                            else if (plot.food == Food::Banana) {
-                                                currentPartT = bananaT;
-                                            }
-                                            else if (plot.food == Food::Carrot) {
-                                                currentPartT = carrotT;
-                                            }
-                                            else if (plot.food == Food::Grape) {
-                                                currentPartT = grapeT;
-                                            }
-                                            else if (plot.food == Food::Potato) {
-                                                currentPartT = potatoT;
-                                            }
-                                            else if (plot.food == Food::Pumpkin) {
-                                                currentPartT = pumpkinT;
-                                            }
-                                            for (int i = 0; i < 10; ++i) {
-                                                parts.push_back(Part());
-                                                parts.back().dstR.w = 32;
-                                                parts.back().dstR.h = 32;
-                                                parts.back().dstR.x = random(0, windowWidth - parts.back().dstR.w);
-                                                parts.back().dstR.y = -parts.back().dstR.h;
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                            else {
-                                canCollect = false;
-                            }
+                            onSpaceInOutsideState(hour, canCollect, foods, state, plots, player, parts);
                         }
                     }
                 }
@@ -2733,6 +2908,9 @@ gameBegin:
                         if (std::stoi(energyText.text) > 0) {
                             shouldGoHome = false;
                         }
+                    }
+                    if (SDL_PointInFRect(&mousePos, &actionR)) {
+                        onSpaceInOutsideState(hour, canCollect, foods, state, plots, player, parts);
                     }
                 }
                 if (event.type == SDL_MOUSEBUTTONUP) {
@@ -2805,7 +2983,7 @@ gameBegin:
                 }
             }
             else {
-                if (keys[SDL_SCANCODE_A]) {
+                if (keys[SDL_SCANCODE_A] || buttons[SDL_BUTTON_LEFT] && SDL_PointInFRect(&mousePos, &leftR)) {
                     player.dx = -1;
                     if (!isMoving) {
                         energyClock.restart();
@@ -2813,7 +2991,7 @@ gameBegin:
                     isMoving = true;
                     playerDirection = PlayerDirection::Left;
                 }
-                else if (keys[SDL_SCANCODE_D]) {
+                else if (keys[SDL_SCANCODE_D] || buttons[SDL_BUTTON_LEFT] && SDL_PointInFRect(&mousePos, &rightR)) {
                     player.dx = 1;
                     if (!isMoving) {
                         energyClock.restart();
@@ -2821,7 +2999,7 @@ gameBegin:
                     isMoving = true;
                     playerDirection = PlayerDirection::Right;
                 }
-                if (keys[SDL_SCANCODE_W]) {
+                if (keys[SDL_SCANCODE_W] || buttons[SDL_BUTTON_LEFT] && SDL_PointInFRect(&mousePos, &upR)) {
                     player.dy = -1;
                     if (!isMoving) {
                         energyClock.restart();
@@ -2829,7 +3007,7 @@ gameBegin:
                     isMoving = true;
                     playerDirection = PlayerDirection::Up;
                 }
-                else if (keys[SDL_SCANCODE_S]) {
+                else if (keys[SDL_SCANCODE_S] || buttons[SDL_BUTTON_LEFT] && SDL_PointInFRect(&mousePos, &downR)) {
                     player.dy = 1;
                     if (!isMoving) {
                         energyClock.restart();
@@ -2841,7 +3019,7 @@ gameBegin:
             player.r.x = clamp(player.r.x, 0, windowWidth - player.r.w);
             player.r.y = clamp(player.r.y, 0, windowHeight - player.r.h);
             if (!keys[SDL_SCANCODE_A] && !keys[SDL_SCANCODE_D]
-                && !keys[SDL_SCANCODE_W] && !keys[SDL_SCANCODE_S]) {
+                && !keys[SDL_SCANCODE_W] && !keys[SDL_SCANCODE_S] && (!buttons[SDL_BUTTON_LEFT] || buttons[SDL_BUTTON_LEFT] && !SDL_PointInFRect(&mousePos, &leftR) && !SDL_PointInFRect(&mousePos, &rightR) && !SDL_PointInFRect(&mousePos, &upR) && !SDL_PointInFRect(&mousePos, &downR))) {
                 isMoving = false;
             }
             if (isMoving) {
@@ -2863,7 +3041,7 @@ gameBegin:
             }
             player.r.x += player.dx * deltaTime * playerSpeed;
             player.r.y += player.dy * deltaTime * playerSpeed;
-            if (SDL_HasIntersectionF(&houseR, &player.r) && keys[SDL_SCANCODE_SPACE]) {
+            if (SDL_HasIntersectionF(&houseR, &player.r) && (keys[SDL_SCANCODE_SPACE] || buttons[SDL_BUTTON_LEFT] && SDL_PointInFRect(&mousePos, &actionR))) {
                 if (!exitedHome) {
                     exitedHome = true;
                     player.r.x = doorI.dstR.x + doorI.dstR.w / 2.0f - player.r.w / 2.0f;
@@ -2976,6 +3154,13 @@ gameBegin:
             if (!canCollect) {
                 cantCollectText.draw(renderer);
             }
+#ifdef __ANDROID__
+            SDL_RenderCopyF(renderer, circleT, 0, &leftR);
+            SDL_RenderCopyF(renderer, circleT, 0, &rightR);
+            SDL_RenderCopyF(renderer, circleT, 0, &upR);
+            SDL_RenderCopyF(renderer, circleT, 0, &downR);
+            SDL_RenderCopyF(renderer, redCircleT, 0, &actionR);
+#endif
             SDL_RenderPresent(renderer);
         }
         else if (state == State::Shop) {
@@ -3189,156 +3374,9 @@ gameBegin:
                         shouldShowWhenCanSleepAndGoShop = false;
                         shouldShowInfoTextAboutNotEnoughEnergy = false;
                         if (event.key.keysym.scancode == SDL_SCANCODE_SPACE) {
-                            if (SDL_HasIntersectionF(&player.r, &shopI.dstR)) {
-                                if (hour >= 0 && hour < 7 || hour > 17) {
-                                    state = State::Shop;
-                                    shouldShowWhenCanSleepAndGoShop = false;
-                                    Mix_PlayChannel(-1, doorS, 0);
-                                    /*
-                                        NOTE: Order in storage
-                                        0 Apple,
-                                        1 Carrot,
-                                        2 Grape,
-                                        3 Potato,
-                                        4 Pumpkin,
-                                        5 Banana,
-                                        Order in shop
-                                        0 banana
-                                        1 apple
-                                        2 grape
-                                        3 pumpkin 
-                                        4 potato
-                                        5 carrot
-                                    */
-                                    shop.sellItems[0].countText.setText(renderer, robotoF, "x" + std::to_string(storage[5].amount));
-                                    shop.sellItems[1].countText.setText(renderer, robotoF, "x" + std::to_string(storage[0].amount));
-                                    shop.sellItems[2].countText.setText(renderer, robotoF, "x" + std::to_string(storage[2].amount));
-                                    shop.sellItems[3].countText.setText(renderer, robotoF, "x" + std::to_string(storage[4].amount));
-                                    shop.sellItems[4].countText.setText(renderer, robotoF, "x" + std::to_string(storage[3].amount));
-                                    shop.sellItems[5].countText.setText(renderer, robotoF, "x" + std::to_string(storage[1].amount));
-                                    if (foods[0] == Food::Apple) {
-                                        if (foods[1] == Food::Apple) {
-                                            shop.sellItems[1].countText.setText(renderer, robotoF, "x" + std::to_string(storage[0].amount + 2));
-                                        }
-                                        else {
-                                            shop.sellItems[1].countText.setText(renderer, robotoF, "x" + std::to_string(storage[0].amount + 1));
-                                        }
-                                    }
-                                    else if (foods[0] == Food::Banana) {
-                                        if (foods[1] == Food::Banana) {
-                                            shop.sellItems[0].countText.setText(renderer, robotoF, "x" + std::to_string(storage[5].amount + 2));
-                                        }
-                                        else {
-                                            shop.sellItems[0].countText.setText(renderer, robotoF, "x" + std::to_string(storage[5].amount + 1));
-                                        }
-                                    }
-                                    else if (foods[0] == Food::Carrot) {
-                                        if (foods[1] == Food::Carrot) {
-                                            shop.sellItems[5].countText.setText(renderer, robotoF, "x" + std::to_string(storage[1].amount + 2));
-                                        }
-                                        else {
-                                            shop.sellItems[5].countText.setText(renderer, robotoF, "x" + std::to_string(storage[1].amount + 1));
-                                        }
-                                    }
-                                    else if (foods[0] == Food::Grape) {
-                                        if (foods[1] == Food::Grape) {
-                                            shop.sellItems[2].countText.setText(renderer, robotoF, "x" + std::to_string(storage[2].amount + 2));
-                                        }
-                                        else {
-                                            shop.sellItems[2].countText.setText(renderer, robotoF, "x" + std::to_string(storage[2].amount + 1));
-                                        }
-                                    }
-                                    else if (foods[0] == Food::Potato) {
-                                        if (foods[1] == Food::Potato) {
-                                            shop.sellItems[4].countText.setText(renderer, robotoF, "x" + std::to_string(storage[3].amount + 2));
-                                        }
-                                        else {
-                                            shop.sellItems[4].countText.setText(renderer, robotoF, "x" + std::to_string(storage[3].amount + 1));
-                                        }
-                                    }
-                                    else if (foods[0] == Food::Pumpkin) {
-                                        if (foods[1] == Food::Pumpkin) {
-                                            shop.sellItems[3].countText.setText(renderer, robotoF, "x" + std::to_string(storage[4].amount + 2));
-                                        }
-                                        else {
-                                            shop.sellItems[3].countText.setText(renderer, robotoF, "x" + std::to_string(storage[4].amount + 1));
-                                        }
-                                    }
-                                    if (foods[0] != foods[1]) {
-                                        if (foods[1] == Food::Apple) {
-                                            shop.sellItems[1].countText.setText(renderer, robotoF, "x" + std::to_string(storage[0].amount + 1));
-                                        }
-                                        else if (foods[1] == Food::Banana) {
-                                            shop.sellItems[0].countText.setText(renderer, robotoF, "x" + std::to_string(storage[5].amount + 1));
-                                        }
-                                        else if (foods[1] == Food::Carrot) {
-                                            shop.sellItems[5].countText.setText(renderer, robotoF, "x" + std::to_string(storage[1].amount + 1));
-                                        }
-                                        else if (foods[1] == Food::Grape) {
-                                            shop.sellItems[2].countText.setText(renderer, robotoF, "x" + std::to_string(storage[2].amount + 1));
-                                        }
-                                        else if (foods[1] == Food::Potato) {
-                                            shop.sellItems[4].countText.setText(renderer, robotoF, "x" + std::to_string(storage[3].amount + 1));
-                                        }
-                                        else if (foods[1] == Food::Pumpkin) {
-                                            shop.sellItems[3].countText.setText(renderer, robotoF, "x" + std::to_string(storage[4].amount + 1));
-                                        }
-                                    }
-                                }
-                                else {
-                                    shouldShowWhenCanSleepAndGoShop = true;
-                                }
-                            }
-                            else if (SDL_HasIntersectionF(&player.r, &doorI.dstR)) {
-                                if (!shouldGoHome) {
-                                    state = State::Outside;
-                                    player.r.x = houseR.x + houseR.w + 5;
-                                    player.r.y = houseR.y + houseR.h / 2 - player.r.h / 2;
-                                    canCollect = true;
-                                    shouldShowWhenCanSleepAndGoShop = false;
-                                    Mix_PlayChannel(-1, doorS, 0);
-                                }
-                                else {
-                                    shouldShowInfoTextAboutNotEnoughEnergy = true;
-                                }
-                            }
-                            else if (SDL_HasIntersectionF(&player.r, &bedI.dstR)) {
-                                if (hour >= 0 && hour < 7 || hour > 17) {
-                                    shouldShowWhenCanSleepAndGoShop = false;
-                                    hour = 7;
-                                    alreadySick = false;
-                                    if (sickLevel > 0) {
-                                        sickLevel--;
-                                    }
-                                    hourText.setText(renderer, robotoF, std::to_string(hour) + "am");
-                                    energyText.setText(renderer, robotoF, maxEnergy > std::stoi(energyText.text) ? maxEnergy : std::stoi(energyText.text));
-                                    shouldGoHome = false;
-                                    shouldShowInfoTextAboutNotEnoughEnergy = false;
-                                    Mix_PlayChannel(-1, sleepS, 0);
-                                }
-                                else {
-                                    shouldShowWhenCanSleepAndGoShop = true;
-                                }
-                            }
-                            else if (SDL_HasIntersectionF(&player.r, &chestI.dstR)) {
-                                state = State::Storage;
-                            }
-                        }
-
-                        if (SDL_HasIntersectionF(&player.r, &shopI.dstR)) {
-                            currentAction.setActionText(shopI.actionText);
-                        }
-                        else if (SDL_HasIntersectionF(&player.r, &doorI.dstR)) {
-                            currentAction.setActionText(doorI.actionText);
-                        }
-                        else if (SDL_HasIntersectionF(&player.r, &bedI.dstR)) {
-                            currentAction.setActionText(bedI.actionText);
-                        }
-                        else if (SDL_HasIntersectionF(&player.r, &chestI.dstR)) {
-                            currentAction.setActionText(chestI.actionText);
-                        }
-                        else {
-                            currentAction.setActionText("");
+                            onSpaceInHomeState(player, hour, state, shouldShowWhenCanSleepAndGoShop, foods, shop, storage, doorI, shouldGoHome,
+                                canCollect, shouldShowInfoTextAboutNotEnoughEnergy, houseR, shopI, bedI, alreadySick, sickLevel, hourText, energyText, maxEnergy,
+                                chestI);
                         }
                     }
                 }
@@ -3372,6 +3410,11 @@ gameBegin:
                             shouldGoHome = false;
                         }
                     }
+                    if (SDL_PointInFRect(&mousePos, &actionR)) {
+                        onSpaceInHomeState(player, hour, state, shouldShowWhenCanSleepAndGoShop, foods, shop, storage, doorI, shouldGoHome,
+                            canCollect, shouldShowInfoTextAboutNotEnoughEnergy, houseR, shopI, bedI, alreadySick, sickLevel, hourText, energyText, maxEnergy,
+                            chestI);
+                    }
                 }
                 if (event.type == SDL_MOUSEBUTTONUP) {
                     buttons[event.button.button] = false;
@@ -3387,19 +3430,19 @@ gameBegin:
             }
             player.dx = 0;
             player.dy = 0;
-            if (keys[SDL_SCANCODE_A]) {
+            if (keys[SDL_SCANCODE_A] || buttons[SDL_BUTTON_LEFT] && SDL_PointInFRect(&mousePos, &leftR)) {
                 player.dx = -1;
                 playerDirection = PlayerDirection::Left;
             }
-            else if (keys[SDL_SCANCODE_D]) {
+            else if (keys[SDL_SCANCODE_D] || buttons[SDL_BUTTON_LEFT] && SDL_PointInFRect(&mousePos, &rightR)) {
                 player.dx = 1;
                 playerDirection = PlayerDirection::Right;
             }
-            if (keys[SDL_SCANCODE_W]) {
+            if (keys[SDL_SCANCODE_W] || buttons[SDL_BUTTON_LEFT] && SDL_PointInFRect(&mousePos, &upR)) {
                 player.dy = -1;
                 playerDirection = PlayerDirection::Up;
             }
-            else if (keys[SDL_SCANCODE_S]) {
+            else if (keys[SDL_SCANCODE_S] || buttons[SDL_BUTTON_LEFT] && SDL_PointInFRect(&mousePos, &downR)) {
                 player.dy = 1;
                 playerDirection = PlayerDirection::Down;
             }
@@ -3414,35 +3457,6 @@ gameBegin:
             for (int i = 0; i < (int)(Food::NumFood); ++i) {
                 scoreGain.push_back(random(1, 10));
             }
-
-#if 0
-            for (int i = 0; i < foods.size(); ++i) {
-                if (foods[i] == Food::Apple) {
-                    foods[i] = Food::Empty;
-                    scoreText.setText(renderer, robotoF, std::stoi(scoreText.text) + scoreGain[(int)(Food::Apple)]);
-                }
-                else if (foods[i] == Food::Banana) {
-                    foods[i] = Food::Empty;
-                    scoreText.setText(renderer, robotoF, std::stoi(scoreText.text) + scoreGain[(int)(Food::Banana)]);
-                }
-                else if (foods[i] == Food::Carrot) {
-                    foods[i] = Food::Empty;
-                    scoreText.setText(renderer, robotoF, std::stoi(scoreText.text) + scoreGain[(int)(Food::Carrot)]);
-                }
-                else if (foods[i] == Food::Grape) {
-                    foods[i] = Food::Empty;
-                    scoreText.setText(renderer, robotoF, std::stoi(scoreText.text) + scoreGain[(int)(Food::Grape)]);
-                }
-                else if (foods[i] == Food::Potato) {
-                    foods[i] = Food::Empty;
-                    scoreText.setText(renderer, robotoF, std::stoi(scoreText.text) + scoreGain[(int)(Food::Potato)]);
-                }
-                else if (foods[i] == Food::Pumpkin) {
-                    foods[i] = Food::Empty;
-                    scoreText.setText(renderer, robotoF, std::stoi(scoreText.text) + scoreGain[(int)(Food::Pumpkin)]);
-                }
-            }
-#endif
             moveTimeByOneHour(timeClock, hour, hourText, sickLevel, alreadySick);
             if (hungerClock.getElapsedTime() > HUNGER_DECREASE_DELAY_IN_MS) {
                 if (std::stoi(hungerText.text) > 0) {
@@ -3463,12 +3477,34 @@ gameBegin:
             if (increasedPlayerSpeedClock.getElapsedTime() > 1000) {
                 playerSpeed = INIT_PLAYER_SPEED;
             }
+            if (SDL_HasIntersectionF(&player.r, &shopI.dstR)) {
+                currentAction.setActionText(shopI.actionText);
+            }
+            else if (SDL_HasIntersectionF(&player.r, &doorI.dstR)) {
+                currentAction.setActionText(doorI.actionText);
+            }
+            else if (SDL_HasIntersectionF(&player.r, &bedI.dstR)) {
+                currentAction.setActionText(bedI.actionText);
+            }
+            else if (SDL_HasIntersectionF(&player.r, &chestI.dstR)) {
+                currentAction.setActionText(chestI.actionText);
+            }
+            else {
+                currentAction.setActionText("");
+            }
             SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
             SDL_RenderClear(renderer);
             RenderHome(homeGround, tile, homeWall, homeSeparator, hour, windowR, bedI, doorI, shopI, chestI,
                 actionText, currentAction, shouldShowInfoTextAboutNotEnoughEnergy, infoTextAboutNotEnoughEnergy, shouldShowWhenCanSleepAndGoShop, canSleepAndGoShopText, scoreText, isMuted,
                 soundBtnR, hourText, energyText, sunR, energyR, playerDirection, playerAnimationFrames, playerAnimationFrame, player, isMoving,
                 playerAnimationClock, hungerText, sickText, sickLevel, inventorySlotR, inventorySlot2R, foods, inventorySlotXR, inventorySlotX2R, controlsText, keyControlsText);
+#ifdef __ANDROID__
+            SDL_RenderCopyF(renderer, circleT, 0, &leftR);
+            SDL_RenderCopyF(renderer, circleT, 0, &rightR);
+            SDL_RenderCopyF(renderer, circleT, 0, &upR);
+            SDL_RenderCopyF(renderer, circleT, 0, &downR);
+            SDL_RenderCopyF(renderer, redCircleT, 0, &actionR);
+#endif
             SDL_RenderPresent(renderer);
         }
         else if (state == State::Minigame) {

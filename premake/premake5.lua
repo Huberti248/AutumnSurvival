@@ -1,4 +1,4 @@
-workspace "AutumnLeafCollector"
+workspace "AutumnSurvival"
 
 architecture "x86"
 location "../"
@@ -21,7 +21,7 @@ os.execute("mklink /J ..\\android\\app\\jni\\SDL_net 			..\\vendor\\SDL_net")
 os.execute("mkdir ..\\android\\app\\src\\main\\assets")
 os.execute("mklink /J ..\\android\\app\\src\\main\\assets\\res 	..\\res")
 
-project "AutumnLeafCollector"
+project "AutumnSurvival"
 	location "../"
 	language "C++"
 	cppdialect "C++17"

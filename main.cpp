@@ -1999,6 +1999,7 @@ int main(int argc, char* argv[])
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
     SDL_AddEventWatch(eventWatch, 0);
     prefPath = SDL_GetPrefPath("NextCodeApps", "AutumnSurvival");
+    bool shouldShowIntro = true;
 gameBegin:
     leavesT = IMG_LoadTexture(renderer, "res/leaves.png");
     treeT = IMG_LoadTexture(renderer, "res/tree.png");
@@ -2194,7 +2195,13 @@ gameBegin:
     shop.sellItems.back().gainText.dstR.x = shop.sellItems.back().sellR.x + shop.sellItems.back().sellR.w / 2 - shop.sellItems.back().gainText.dstR.w / 2;
     shop.sellItems.back().gainText.dstR.y = shop.sellItems.back().sellR.y + shop.sellItems.back().sellR.h;
     shop.sellItems.back().foodT = carrotT;
-    State state = State::Intro;
+    State state;
+    if (shouldShowIntro) {
+        state = State::Intro;
+    }
+    else {
+        state = State::Main;
+    }
     State pausedState = state;
     Clock rotClock;
     int rotDelayInMs = ROT_INIT_DELAY_IN_MS;
@@ -3573,6 +3580,7 @@ gameBegin:
                 if (event.type == SDL_MOUSEBUTTONDOWN) {
                     buttons[event.button.button] = true;
                     if (SDL_PointInFRect(&mousePos, &playAgainText.dstR)) {
+                        shouldShowIntro = false;
                         goto gameBegin;
                     }
                 }
